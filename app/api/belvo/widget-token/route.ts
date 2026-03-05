@@ -95,7 +95,7 @@ export async function POST(request: Request) {
           event: `${basePath}?event=error`,
         },
         consent: {
-          terms_and_conditions_url: `${origin}/termos` ?? "https://belvo.com",
+          terms_and_conditions_url: `${origin}/termos`,
           permissions: [
             "REGISTER",
             "ACCOUNTS",
