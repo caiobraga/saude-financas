@@ -10,12 +10,26 @@ export default function CadastroPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [cpf, setCpf] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  function formatCpf(value: string) {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const cpfDigits = cpf.replace(/\D/g, "");
+    if (cpfDigits.length !== 11) {
+      setError("CPF deve ter 11 dígitos.");
+      return;
+    }
     setLoading(true);
     try {
       const supabase = createClient();
@@ -23,7 +37,7 @@ export default function CadastroPage() {
         email,
         password,
         options: {
-          data: { full_name: fullName },
+          data: { full_name: fullName.trim(), cpf: cpfDigits },
         },
       });
       if (err) {
@@ -66,6 +80,23 @@ export default function CadastroPage() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               autoComplete="name"
+              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="cpf"
+              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              CPF
+            </label>
+            <input
+              id="cpf"
+              type="text"
+              value={cpf}
+              onChange={(e) => setCpf(formatCpf(e.target.value))}
+              placeholder="000.000.000-00"
+              maxLength={14}
               className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
             />
           </div>

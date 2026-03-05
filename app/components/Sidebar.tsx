@@ -9,6 +9,7 @@ const nav = [
   { href: "/dashboard/transacoes", label: "Transações" },
   { href: "/dashboard/contas", label: "Contas" },
   { href: "/dashboard/conectar", label: "Conectar banco" },
+  { href: "/dashboard/perfil", label: "Perfil" },
   { href: "/dashboard/planos", label: "Planos" },
 ];
 

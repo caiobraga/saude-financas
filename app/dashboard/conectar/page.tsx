@@ -11,7 +11,6 @@ export default function ConectarPage() {
   const searchParams = useSearchParams();
   const success = searchParams.get("success");
   const [loading, setLoading] = useState(false);
-  const [widgetToken, setWidgetToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -27,9 +26,15 @@ export default function ConectarPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Erro ao sincronizar");
-        setWidgetToken(null);
         router.push("/dashboard/conectar?success=1");
         router.refresh();
+        if (typeof window !== "undefined" && window.opener) {
+          window.opener.postMessage(
+            { type: "belvo_link_created", link_id: linkId },
+            window.location.origin
+          );
+          window.close();
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Erro ao sincronizar");
       } finally {
@@ -39,16 +44,29 @@ export default function ConectarPage() {
     [router]
   );
 
+  const linkIdFromUrl =
+    searchParams.get("link_id") ?? searchParams.get("link") ?? null;
+
+  // Belvo redireciona para nossa URL com link_id após sucesso
   useEffect(() => {
-    if (!widgetToken) return;
+    if (linkIdFromUrl) registerLink(linkIdFromUrl);
+  }, [linkIdFromUrl, registerLink]);
+
+  // Se abrimos o widget em popup, escutar quando o popup avisa que terminou
+  useEffect(() => {
     const handler = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
       const data = event.data;
-      if (data?.link_id) registerLink(data.link_id);
+      if (data?.type === "belvo_link_created" && data?.link_id) {
+        registerLink(data.link_id);
+        router.refresh();
+      }
+      if (data?.link_id && !data?.type) registerLink(data.link_id);
       if (data?.link) registerLink(data.link);
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [widgetToken, registerLink]);
+  }, [registerLink, router]);
 
   async function handleOpenWidget() {
     setLoading(true);
@@ -57,7 +75,21 @@ export default function ConectarPage() {
       const res = await fetch("/api/belvo/widget-token", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao obter token");
-      if (data.access) setWidgetToken(data.access);
+      const access = data.access;
+      if (!access) return;
+      const externalId = `sf-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const params: Record<string, string> = {
+        access_token: access,
+        locale: "pt",
+        access_mode: "recurrent",
+        external_id: externalId,
+        country_codes: "BR",
+      };
+      if (Array.isArray(data.institutions) && data.institutions.length > 0) {
+        params.institutions = data.institutions.join(",");
+      }
+      const widgetUrl = `${BELVO_WIDGET_BASE}/?${new URLSearchParams(params).toString()}`;
+      window.open(widgetUrl, "belvo-widget", "width=500,height=700,scrollbars=yes");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao abrir widget");
     } finally {
@@ -111,44 +143,25 @@ export default function ConectarPage() {
           </p>
         )}
 
-        {!widgetToken ? (
-          <div>
-            <button
-              type="button"
-              onClick={handleOpenWidget}
-              disabled={loading}
-              className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {loading ? "Abrindo..." : "Conectar instituição"}
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Conecte sua conta no quadro abaixo. Ao terminar, seus dados serão
-              sincronizados automaticamente.
+        <div className="space-y-4">
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Será aberta uma nova janela para você escolher o banco e autorizar o
+            compartilhamento. Ao terminar, feche a janela e esta página será atualizada.
+          </p>
+          <button
+            type="button"
+            onClick={handleOpenWidget}
+            disabled={loading}
+            className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {loading ? "Abrindo..." : "Conectar instituição"}
+          </button>
+          {syncing && (
+            <p className="text-sm text-zinc-500">
+              Sincronizando contas e transações...
             </p>
-            <div className="relative h-[500px] w-full overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
-              <iframe
-                title="Belvo Connect Widget"
-                src={`${BELVO_WIDGET_BASE}/?access_token=${encodeURIComponent(widgetToken)}&locale=pt`}
-                className="absolute inset-0 h-full w-full border-0"
-              />
-            </div>
-            {syncing && (
-              <p className="text-sm text-zinc-500">
-                Sincronizando contas e transações...
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={() => setWidgetToken(null)}
-              className="text-sm text-zinc-500 underline hover:text-zinc-700"
-            >
-              Cancelar
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
