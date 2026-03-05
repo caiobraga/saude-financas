@@ -1,9 +1,9 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
-export default function ConectarCallbackPage() {
+function CallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
@@ -57,4 +57,18 @@ export default function ConectarCallbackPage() {
     );
   }
   return null;
+}
+
+export default function ConectarCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center p-8">
+          <p className="text-zinc-500">Carregando...</p>
+        </div>
+      }
+    >
+      <CallbackContent />
+    </Suspense>
+  );
 }
