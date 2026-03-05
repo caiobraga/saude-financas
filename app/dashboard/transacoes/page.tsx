@@ -50,11 +50,19 @@ export default async function TransacoesPage() {
     ] = await Promise.all([
       supabase
         .from("transactions")
-        .select("id, date, description, amount, type, category")
+        .select("id, date, description, amount, type, category, account_id")
         .order("date", { ascending: false }),
       supabase.from("accounts").select("id, name").order("name"),
     ]);
-    transactions = transactionsData ?? [];
+    transactions = (transactionsData ?? []).map((t) => ({
+      id: t.id,
+      date: typeof t.date === "string" ? t.date : String(t.date),
+      description: t.description,
+      amount: Number(t.amount),
+      type: t.type,
+      category: t.category ?? null,
+      account_id: t.account_id ?? "",
+    }));
     accounts = accountsData ?? [];
   }
 
