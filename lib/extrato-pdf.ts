@@ -357,7 +357,7 @@ function extrairSecaoLancamentos(texto: string): string {
   const end = fimMatch ? fimMatch.index ?? depoisLancamentos.length : depoisLancamentos.length;
   const bloco = depoisLancamentos.slice(0, end).trim();
 
-  const semCabecalho = bloco.replace(/^Lan[çc]amentos\s*/i, "").replace(/^Dia\s+.*?Valor\s*/is, "").trim();
+  const semCabecalho = bloco.replace(/^Lan[çc]amentos\s*/i, "").replace(/^Dia\s+[\s\S]*?Valor\s*/i, "").trim();
   return semCabecalho || bloco;
 }
 
