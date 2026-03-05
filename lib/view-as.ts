@@ -22,8 +22,8 @@ export function setViewAsCookies(
   userId: string,
   userName: string
 ) {
-  response.cookies.set(COOKIE_USER_ID, userId, { path: "/", maxAge: COOKIE_MAX_AGE, sameSite: "lax" });
-  response.cookies.set(COOKIE_USER_NAME, userName, { path: "/", maxAge: COOKIE_MAX_AGE, sameSite: "lax" });
+  response.cookies.set(COOKIE_USER_ID, userId, { path: "/", maxAge: COOKIE_MAX_AGE });
+  response.cookies.set(COOKIE_USER_NAME, userName, { path: "/", maxAge: COOKIE_MAX_AGE });
 }
 
 export function clearViewAsCookies(
