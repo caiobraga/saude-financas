@@ -1,0 +1,71 @@
+ Extrato de Conta Corrente
+ Cliente RUBIA CLEIA PELISSON MAXI
+Período: 01/03/2026                           Agência: 112-0     Conta: 64656-3
+
+  Lançamentos
+  Dia             Lote        Documento                  Histórico                                          Valor
+  27/02/2026                                             Saldo Anterior                                375,53 (+)
+  02/03/2026                                             Encargos                                       39,02 (-)
+                                                         Pix - Enviado
+  02/03/2026      112         30201                                                                     12,00 (-)
+                                                         28/02 09:47 Marciel Plaster
+                                                         Pix - Enviado
+  02/03/2026      112         30202                      28/02 09:50 SERGIO DE SENA PEROBA              10,00 (-)
+
+                                                         Transferência recebida
+  02/03/2026      112         600112000064656            28/02 11:10 RUBIA CLEIA PELISSON MAX        1.101,00 (+)
+
+                                                         Pix - Enviado
+  02/03/2026      112         30203                                                                     55,00 (-)
+                                                         28/02 13:48 Letícia da Silva Matos
+                                                         Pix - Recebido
+  02/03/2026      103         281746109455682            28/02 17:46 07117901000107 IMAGEM R LT     12.000,00 (+)
+
+                                                         Pix - Enviado
+  02/03/2026      112         30204                      28/02 21:12 PEDRO MAXIMIANO DALAPICUL         100,00 (-)
+
+  02/03/2026                                             SALDO                                      13.260,51 (+)
+
+  Informações Adicionais
+ Saldo Aprovisionado no Dia                                                                        11.779,70 (-)
+ Saldo                                                                                              1.480,81 (+)
+ LIMITE ESPECIAL DA CONTA                                                                               0,00 (+)
+  - Limite Contratado                                                                              22.000,00 (+)
+  - Limite Utilizado                                                                                    0,00 (+)
+  - Limite Disponivel                                                                              22.000,00 (+)
+ Dias de Uso Lim. Especial                                                                                     1
+ Juros *                                                                                                  00,15
+ Data de Debito de Juros                                                                             10/03/2026
+ IOF *                                                                                                      0,00
+ Data de Debito de IOF                                                                               02/03/2026
+ CREDITO BB-MELHOR OFERTA*                                                                        190.446,00 (+)
+ SALDO EM CONTA-SALARIO                                                                                 0,29 (+)
+ Taxa Limite Especial da Conta ao Mês                                                                    8,00%
+ Taxa Limite Especial da Conta ao Ano                                                                  151,82%
+ Tributos (IOF) Diário                                                                                   8,20%
+ Tributos (IOF) Adicional                                                                                0,38%
+ Custo Efetivo Total ao Mês                                                                              8,63%
+ Custo Efetivo Total ao Ano                                                                            173,65%
+ Data Venc. Ch. Especial                                                                             29/01/2027
+
+  Informações Complementares - CET (*)
+  Valor Total Devido                                                                  23.897,72               -
+  Valor Liberado                                                                      22.000,00         99,43%
+  Despesas-(IOF)                                                                         137,72          0,57%
+  Tarifa                                                                               1.760,00          0,00%
+  (*) Simulação para utilização única e integral do limite por 30 dias.
+
+  Lançamentos Futuros
+  Dia             Histórico                                                                               Valor
+ Extrato de Conta Corrente
+ Cliente RUBIA CLEIA PELISSON MAXI
+Período: 01/03/2026                      Agência: 112-0   Conta: 64656-3
+
+  Lançamentos Futuros
+  Dia            Histórico                                                        Valor
+  02/03/2026     PGT CARTAO                                                11.779,70 (-)
+
+  Total Aplicações Financeiras                                                      0,00
+  * Saldos por dia Base
+  Sujeitos a confirmação no momento da contratação
+

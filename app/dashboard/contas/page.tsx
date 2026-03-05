@@ -1,5 +1,11 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { env } from "@/lib/env";
+import { getViewAsFromCookies } from "@/lib/view-as";
+import { getConnectionsWithAccountsForUser } from "@/lib/dashboard-for-user";
+import { DeleteAccountButton } from "@/app/components/DeleteAccountButton";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
@@ -19,28 +25,56 @@ function accountTypeLabel(type: string) {
 
 export default async function ContasPage() {
   const supabase = await createClient();
-  const { data: connections } = await supabase
-    .from("bank_connections")
-    .select("id, institution, status")
-    .order("connected_at", { ascending: false });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const isAdmin = user?.email?.toLowerCase() === env.admin.email.toLowerCase();
+  const cookieStore = await cookies();
+  const viewAs = getViewAsFromCookies(cookieStore, isAdmin ?? false);
 
-  const accountsByConnection: { conn: { id: string; institution: string; status: string }; accounts: { id: string; name: string; type: string; balance: number }[] }[] = [];
+  let accountsByConnection: { conn: { id: string; institution: string; status: string }; accounts: { id: string; name: string; type: string; balance: number }[] }[] = [];
 
-  if (connections?.length) {
-    for (const conn of connections) {
-      const { data: accounts } = await supabase
-        .from("accounts")
-        .select("id, name, type, balance")
-        .eq("connection_id", conn.id);
-      accountsByConnection.push({
+  if (viewAs) {
+    try {
+      const admin = createAdminClient();
+      const list = await getConnectionsWithAccountsForUser(admin, viewAs.userId);
+      accountsByConnection = list.map(({ conn, accounts }) => ({
         conn,
-        accounts: accounts ?? [],
-      });
+        accounts: accounts.map((a) => ({
+          id: a.id,
+          name: a.name,
+          type: a.type,
+          balance: a.balance ?? 0,
+        })),
+      }));
+    } catch {
+      // leave empty
+    }
+  } else {
+    const { data: connections } = await supabase
+      .from("bank_connections")
+      .select("id, institution, status")
+      .order("connected_at", { ascending: false });
+
+    if (connections?.length) {
+      for (const conn of connections) {
+        const { data: accounts } = await supabase
+          .from("accounts")
+          .select("id, name, type, balance")
+          .eq("connection_id", conn.id);
+        accountsByConnection.push({
+          conn,
+          accounts: (accounts ?? []).map((a) => ({
+            ...a,
+            balance: Number(a.balance ?? 0),
+          })),
+        });
+      }
     }
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-white">
         Contas
       </h1>
@@ -85,7 +119,7 @@ export default async function ContasPage() {
                 {accounts.map((acc) => (
                   <li
                     key={acc.id}
-                    className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                    className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0"
                   >
                     <div>
                       <p className="font-medium text-zinc-900 dark:text-white">
@@ -95,9 +129,12 @@ export default async function ContasPage() {
                         {accountTypeLabel(acc.type)}
                       </p>
                     </div>
-                    <span className="tabular-nums font-semibold text-zinc-900 dark:text-white">
-                      {formatCurrency(Number(acc.balance))}
-                    </span>
+                    <div className="flex items-center gap-4">
+                      <span className="tabular-nums font-semibold text-zinc-900 dark:text-white">
+                        {formatCurrency(Number(acc.balance))}
+                      </span>
+                      <DeleteAccountButton accountId={acc.id} accountName={acc.name} readOnly={!!viewAs} />
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -38,14 +38,14 @@ function CallbackContent() {
 
   if (status === "loading") {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center p-8">
+      <div className="flex min-h-[40vh] items-center justify-center p-4 sm:p-8">
         <p className="text-zinc-500">Sincronizando sua conta...</p>
       </div>
     );
   }
   if (status === "error") {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 md:p-8">
         <p className="text-red-600 dark:text-red-400">{message}</p>
         <a
           href="/dashboard/conectar"
@@ -63,7 +63,7 @@ export default function ConectarCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[40vh] items-center justify-center p-8">
+        <div className="flex min-h-[40vh] items-center justify-center p-4 sm:p-8">
           <p className="text-zinc-500">Carregando...</p>
         </div>
       }

@@ -29,6 +29,10 @@ export async function middleware(request: NextRequest) {
   const isDashboard = path.startsWith("/dashboard");
   const isAuthPage = path === "/login" || path === "/cadastro";
 
+  if (path === "/auth/callback") {
+    return response;
+  }
+
   if (isDashboard && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -52,5 +56,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/cadastro", "/dashboard/:path*"],
+  matcher: ["/", "/login", "/cadastro", "/dashboard/:path*", "/auth/callback"],
 };

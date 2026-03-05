@@ -22,6 +22,10 @@ export const env = {
   supabase: {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
     anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+    serviceRoleKey: () => getEnv("SUPABASE_SERVICE_ROLE_KEY", false),
+  },
+  admin: {
+    email: "admin@mail.com",
   },
   // Stripe
   stripe: {

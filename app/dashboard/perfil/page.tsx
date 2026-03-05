@@ -80,14 +80,14 @@ export default function PerfilPage() {
 
   if (loading) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 md:p-8">
         <p className="text-zinc-500">Carregando...</p>
       </div>
     );
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-white">
         Perfil
       </h1>
