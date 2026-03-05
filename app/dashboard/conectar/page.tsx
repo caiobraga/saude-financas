@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 
 const BELVO_WIDGET_BASE =
   process.env.NEXT_PUBLIC_BELVO_WIDGET_URL ?? "https://widget.belvo.io";
 
-export default function ConectarPage() {
+function ConectarContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const success = searchParams.get("success");
@@ -47,12 +47,10 @@ export default function ConectarPage() {
   const linkIdFromUrl =
     searchParams.get("link_id") ?? searchParams.get("link") ?? null;
 
-  // Belvo redireciona para nossa URL com link_id após sucesso
   useEffect(() => {
     if (linkIdFromUrl) registerLink(linkIdFromUrl);
   }, [linkIdFromUrl, registerLink]);
 
-  // Se abrimos o widget em popup, escutar quando o popup avisa que terminou
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
@@ -164,5 +162,19 @@ export default function ConectarPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ConectarPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center p-8">
+          <p className="text-zinc-500">Carregando...</p>
+        </div>
+      }
+    >
+      <ConectarContent />
+    </Suspense>
   );
 }
