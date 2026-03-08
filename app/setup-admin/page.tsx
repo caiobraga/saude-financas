@@ -43,13 +43,7 @@ export default function SetupAdminPage() {
         >
           Saúde Finanças
         </Link>
-        <h1 className="mt-8 text-2xl font-semibold text-zinc-900 dark:text-white">
-          Criar usuário admin
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Use uma única vez. Defina <code className="rounded bg-zinc-200 px-1 dark:bg-zinc-700">ADMIN_SEED_SECRET</code> e{" "}
-          <code className="rounded bg-zinc-200 px-1 dark:bg-zinc-700">SUPABASE_SERVICE_ROLE_KEY</code> no .env.
-        </p>
+       
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
             <label
