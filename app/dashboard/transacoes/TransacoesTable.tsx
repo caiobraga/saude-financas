@@ -25,6 +25,8 @@ type Transaction = {
   amount: number;
   type: string;
   category: string | null;
+  parcela_numero?: number | null;
+  parcela_total?: number | null;
 };
 
 type Account = { id: string; name: string };
@@ -55,6 +57,8 @@ export function TransacoesTable({
     type: "debit" as "credit" | "debit",
     amount: "",
     category: "",
+    parcela_numero: "" as string | number,
+    parcela_total: "" as string | number,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +83,8 @@ export function TransacoesTable({
     .map((t) => t.id);
   const isAllSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
 
+  const showParcelaColumn = transactions.some((t) => t.parcela_numero != null && t.parcela_total != null);
+
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -101,6 +107,8 @@ export function TransacoesTable({
       amount: t.amount,
       type: t.type,
       category: t.category ?? undefined,
+      parcela_numero: t.parcela_numero ?? undefined,
+      parcela_total: t.parcela_total ?? undefined,
     });
     setError(null);
   }
@@ -119,12 +127,16 @@ export function TransacoesTable({
       const res = await fetch(`/api/transactions/${editingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+        ...editForm,
+        parcela_numero: editForm.parcela_numero ?? null,
+        parcela_total: editForm.parcela_total ?? null,
+      }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao salvar");
       setTransactions((prev) =>
-        prev.map((t) => (t.id === editingId ? { ...t, ...data } : t))
+        prev.map((t) => (t.id === editingId ? { ...t, ...data, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null } : t))
       );
       cancelEdit();
       router.refresh();
@@ -193,6 +205,9 @@ export function TransacoesTable({
     }
     setLoading(true);
     setError(null);
+    const parcelaNumero = addForm.parcela_numero === "" ? null : Number(addForm.parcela_numero);
+    const parcelaTotal = addForm.parcela_total === "" ? null : Number(addForm.parcela_total);
+
     try {
       const res = await fetch("/api/transactions", {
         method: "POST",
@@ -204,11 +219,13 @@ export function TransacoesTable({
           type: addForm.type,
           amount: Math.abs(amount),
           category: addForm.category.trim() || null,
+          parcela_numero: parcelaNumero ?? null,
+          parcela_total: parcelaTotal ?? null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao criar");
-      setTransactions((prev) => [{ ...data, category: data.category ?? null }, ...prev]);
+      setTransactions((prev) => [{ ...data, category: data.category ?? null, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null }, ...prev]);
       setShowAddModal(false);
       setAddForm({
         account_id: accounts[0]?.id ?? "",
@@ -217,6 +234,8 @@ export function TransacoesTable({
         type: "debit",
         amount: "",
         category: "",
+        parcela_numero: "",
+        parcela_total: "",
       });
       router.refresh();
     } catch (e) {
@@ -377,6 +396,11 @@ export function TransacoesTable({
               <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
                 Categoria
               </th>
+              {showParcelaColumn && (
+                <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+                  Parcela
+                </th>
+              )}
               <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300 text-right">
                 Valor
               </th>
@@ -429,6 +453,39 @@ export function TransacoesTable({
                         className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
                       />
                     </td>
+                    {showParcelaColumn && (
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={1}
+                            placeholder="Nº"
+                            value={editForm.parcela_numero ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                parcela_numero: e.target.value === "" ? undefined : parseInt(e.target.value, 10),
+                              }))
+                            }
+                            className="w-14 rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                          />
+                          <span className="text-zinc-500">/</span>
+                          <input
+                            type="number"
+                            min={1}
+                            placeholder="Total"
+                            value={editForm.parcela_total ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                parcela_total: e.target.value === "" ? undefined : parseInt(e.target.value, 10),
+                              }))
+                            }
+                            className="w-14 rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                          />
+                        </div>
+                      </td>
+                    )}
                     <td className="px-4 py-2">
                       <div className="flex items-center justify-end gap-1">
                         <select
@@ -506,6 +563,20 @@ export function TransacoesTable({
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                       {t.category ?? "—"}
                     </td>
+                    {showParcelaColumn && (
+                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                        {t.parcela_numero != null && t.parcela_total != null ? (
+                          <span title={t.parcela_total - t.parcela_numero > 0 ? `Faltam ${t.parcela_total - t.parcela_numero} parcelas` : undefined}>
+                            {t.parcela_numero}/{t.parcela_total}
+                            {t.parcela_total - t.parcela_numero > 0 && (
+                              <span className="ml-1 text-xs text-zinc-500">(faltam {t.parcela_total - t.parcela_numero})</span>
+                            )}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    )}
                     <td
                       className={`whitespace-nowrap px-4 py-3 text-right tabular-nums font-medium ${
                         t.type === "credit"
@@ -640,6 +711,28 @@ export function TransacoesTable({
                   placeholder="Ex: Alimentação"
                   className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Parcela (opcional)</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="Nº"
+                    value={addForm.parcela_numero === "" ? "" : addForm.parcela_numero}
+                    onChange={(e) => setAddForm((f) => ({ ...f, parcela_numero: e.target.value === "" ? "" : parseInt(e.target.value, 10) || "" }))}
+                    className="w-20 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                  />
+                  <span className="text-zinc-500">/</span>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="Total"
+                    value={addForm.parcela_total === "" ? "" : addForm.parcela_total}
+                    onChange={(e) => setAddForm((f) => ({ ...f, parcela_total: e.target.value === "" ? "" : parseInt(e.target.value, 10) || "" }))}
+                    className="w-20 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                  />
+                </div>
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-2">

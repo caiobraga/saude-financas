@@ -29,6 +29,8 @@ type Transaction = {
   amount: number;
   type: string;
   category: string | null;
+  parcela_numero?: number | null;
+  parcela_total?: number | null;
 };
 
 const PROLABORE_CATEGORY_REGEX = /s[oó]cio|pr[oó]-?labore|prolabore|retirada/i;
@@ -36,6 +38,10 @@ const PROLABORE_CATEGORY_REGEX = /s[oó]cio|pr[oó]-?labore|prolabore|retirada/i
 function isProLabore(t: Transaction): boolean {
   const cat = (t.category ?? "").trim();
   return cat.length > 0 && PROLABORE_CATEGORY_REGEX.test(cat);
+}
+
+function hasParcelaAlguma(lista: Transaction[]): boolean {
+  return lista.some((t) => t.parcela_numero != null && t.parcela_total != null);
 }
 
 type PeriodMode = "month" | "range";
@@ -212,44 +218,57 @@ function PlanilhasContent() {
     wb.SheetNames.push("Resumo");
     wb.Sheets["Resumo"] = XLSX.utils.aoa_to_sheet(resumoData);
 
+    const receitasTemParcela = hasParcelaAlguma(receitas);
     const receitasData = [
-      ["Data", "Descrição", "Valor"],
-      ...receitas.sort((a, b) => a.date.localeCompare(b.date)).map((t) => [
-        formatDateShort(t.date),
-        t.description,
-        formatCurrency(Number(t.amount)),
-      ]),
+      receitasTemParcela ? ["Data", "Descrição", "Parcela", "Valor"] : ["Data", "Descrição", "Valor"],
+      ...receitas.sort((a, b) => a.date.localeCompare(b.date)).map((t) =>
+        receitasTemParcela
+          ? [formatDateShort(t.date), t.description, t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "", formatCurrency(Number(t.amount))]
+          : [formatDateShort(t.date), t.description, formatCurrency(Number(t.amount))]
+      ),
       [],
-      ["Total", "", formatCurrency(totalReceitas)],
+      receitasTemParcela ? ["Total", "", "", formatCurrency(totalReceitas)] : ["Total", "", formatCurrency(totalReceitas)],
     ];
     wb.SheetNames.push("Receitas");
     wb.Sheets["Receitas"] = XLSX.utils.aoa_to_sheet(receitasData);
 
+    const prolaboreTemParcela = hasParcelaAlguma(prolabore);
     const prolaboreData = [
-      ["Data", "Descrição", "Valor"],
-      ...prolabore.sort((a, b) => a.date.localeCompare(b.date)).map((t) => [
-        formatDateShort(t.date),
-        t.description,
-        "-" + formatCurrency(Math.abs(Number(t.amount))),
-      ]),
+      prolaboreTemParcela ? ["Data", "Descrição", "Parcela", "Valor"] : ["Data", "Descrição", "Valor"],
+      ...prolabore.sort((a, b) => a.date.localeCompare(b.date)).map((t) =>
+        prolaboreTemParcela
+          ? [formatDateShort(t.date), t.description, t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "", "-" + formatCurrency(Math.abs(Number(t.amount)))]
+          : [formatDateShort(t.date), t.description, "-" + formatCurrency(Math.abs(Number(t.amount)))]
+      ),
       [],
-      ["Total retiradas sócio", "", formatCurrency(totalProlabore)],
+      prolaboreTemParcela ? ["Total retiradas sócio", "", "", formatCurrency(totalProlabore)] : ["Total retiradas sócio", "", formatCurrency(totalProlabore)],
     ];
     wb.SheetNames.push("Pro-labore");
     wb.Sheets["Pro-labore"] = XLSX.utils.aoa_to_sheet(prolaboreData);
 
+    const despesasTemParcela = hasParcelaAlguma(despesasOutras);
     const despesasRows: (string | number)[][] = [
-      ["Data", "Descrição", "Valor", "Categoria"],
+      despesasTemParcela ? ["Data", "Descrição", "Parcela", "Valor", "Categoria"] : ["Data", "Descrição", "Valor", "Categoria"],
       ...despesasOutras
         .sort((a, b) => a.date.localeCompare(b.date))
-        .map((t) => [
-          formatDateShort(t.date),
-          t.description,
-          "-" + formatCurrency(Math.abs(Number(t.amount))),
-          (t.category && t.category.trim()) || "Outras despesas",
-        ]),
+        .map((t) =>
+          despesasTemParcela
+            ? [
+                formatDateShort(t.date),
+                t.description,
+                t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "",
+                "-" + formatCurrency(Math.abs(Number(t.amount))),
+                (t.category && t.category.trim()) || "Outras despesas",
+              ]
+            : [
+                formatDateShort(t.date),
+                t.description,
+                "-" + formatCurrency(Math.abs(Number(t.amount))),
+                (t.category && t.category.trim()) || "Outras despesas",
+              ]
+        ),
       [],
-      ["Total despesas operacionais", "", formatCurrency(totalDespesasOutras), ""],
+      despesasTemParcela ? ["Total despesas operacionais", "", "", formatCurrency(totalDespesasOutras), ""] : ["Total despesas operacionais", "", formatCurrency(totalDespesasOutras), ""],
     ];
     wb.SheetNames.push("Despesas");
     wb.Sheets["Despesas"] = XLSX.utils.aoa_to_sheet(despesasRows);
@@ -393,6 +412,9 @@ function PlanilhasContent() {
                       <tr className="border-b border-zinc-200 dark:border-zinc-700">
                         <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Data</th>
                         <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Descrição</th>
+                        {hasParcelaAlguma(receitas) && (
+                          <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Parcela</th>
+                        )}
                         <th className="pb-2 text-right font-medium text-zinc-600 dark:text-zinc-400">Valor</th>
                       </tr>
                     </thead>
@@ -403,6 +425,11 @@ function PlanilhasContent() {
                           <tr key={t.id} className="border-b border-zinc-100 dark:border-zinc-800">
                             <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
                             <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{t.description}</td>
+                            {hasParcelaAlguma(receitas) && (
+                              <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
+                                {t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "—"}
+                              </td>
+                            )}
                             <td className="py-2 text-right font-medium text-emerald-600 dark:text-emerald-400">
                               {formatCurrency(Number(t.amount))}
                             </td>
@@ -430,6 +457,9 @@ function PlanilhasContent() {
                     <tr className="border-b border-zinc-200 dark:border-zinc-700">
                       <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Data</th>
                       <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Descrição</th>
+                      {hasParcelaAlguma(prolabore) && (
+                        <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Parcela</th>
+                      )}
                       <th className="pb-2 text-right font-medium text-zinc-600 dark:text-zinc-400">Valor</th>
                     </tr>
                   </thead>
@@ -440,6 +470,11 @@ function PlanilhasContent() {
                         <tr key={t.id} className="border-b border-zinc-100 dark:border-zinc-800">
                           <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
                           <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{t.description}</td>
+                          {hasParcelaAlguma(prolabore) && (
+                            <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
+                              {t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "—"}
+                            </td>
+                          )}
                           <td className="py-2 text-right font-medium text-red-600 dark:text-red-400">
                             -{formatCurrency(Math.abs(Number(t.amount)))}
                           </td>
@@ -466,6 +501,7 @@ function PlanilhasContent() {
                 {categoriasOrdenadas.map((cat) => {
                   const itens = despesasOutrasPorCategoria[cat];
                   const totalCat = itens.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+                  const showParcela = hasParcelaAlguma(itens);
                   return (
                     <div key={cat}>
                       <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-400">{cat}</h3>
@@ -475,6 +511,9 @@ function PlanilhasContent() {
                             <tr className="border-b border-zinc-200 dark:border-zinc-700">
                               <th className="pb-2 pr-4 text-left font-medium text-zinc-500 dark:text-zinc-500">Data</th>
                               <th className="pb-2 pr-4 text-left font-medium text-zinc-500 dark:text-zinc-500">Descrição</th>
+                              {showParcela && (
+                                <th className="pb-2 pr-4 text-left font-medium text-zinc-500 dark:text-zinc-500">Parcela</th>
+                              )}
                               <th className="pb-2 text-right font-medium text-zinc-500 dark:text-zinc-500">Valor</th>
                             </tr>
                           </thead>
@@ -485,6 +524,11 @@ function PlanilhasContent() {
                                 <tr key={t.id} className="border-b border-zinc-100 dark:border-zinc-800">
                                   <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
                                   <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{t.description}</td>
+                                  {showParcela && (
+                                    <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
+                                      {t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "—"}
+                                    </td>
+                                  )}
                                   <td className="py-2 text-right font-medium text-red-600 dark:text-red-400">
                                     -{formatCurrency(Math.abs(Number(t.amount)))}
                                   </td>

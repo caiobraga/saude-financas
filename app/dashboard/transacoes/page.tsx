@@ -17,7 +17,7 @@ export default async function TransacoesPage() {
   const cookieStore = await cookies();
   const viewAs = getViewAsFromCookies(cookieStore, isAdmin ?? false);
 
-  let transactions: Array<{ id: string; date: string; description: string; amount: number; type: string; category: string | null; account_id: string }> = [];
+  let transactions: Array<{ id: string; date: string; description: string; amount: number; type: string; category: string | null; account_id: string; parcela_numero: number | null; parcela_total: number | null }> = [];
   let accounts: Array<{ id: string; name: string }> = [];
   let viewAsError: string | null = null;
 
@@ -38,6 +38,8 @@ export default async function TransacoesPage() {
         type: t.type,
         category: t.category ?? null,
         account_id: t.account_id,
+        parcela_numero: t.parcela_numero ?? null,
+        parcela_total: t.parcela_total ?? null,
       }));
     } catch (err) {
       viewAsError = err instanceof Error ? err.message : "Erro ao carregar dados do usuário";
@@ -50,7 +52,7 @@ export default async function TransacoesPage() {
     ] = await Promise.all([
       supabase
         .from("transactions")
-        .select("id, date, description, amount, type, category, account_id")
+        .select("id, date, description, amount, type, category, account_id, parcela_numero, parcela_total")
         .order("date", { ascending: false }),
       supabase.from("accounts").select("id, name").order("name"),
     ]);
@@ -62,6 +64,8 @@ export default async function TransacoesPage() {
       type: t.type,
       category: t.category ?? null,
       account_id: t.account_id ?? "",
+      parcela_numero: t.parcela_numero ?? null,
+      parcela_total: t.parcela_total ?? null,
     }));
     accounts = accountsData ?? [];
   }

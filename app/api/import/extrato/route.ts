@@ -113,6 +113,8 @@ export async function POST(request: Request) {
       amount: t.amount,
       type: t.type,
       category: t.category ?? null,
+      parcela_numero: t.parcela_numero ?? null,
+      parcela_total: t.parcela_total ?? null,
     }));
 
     const { error: txError } = await supabase.from("transactions").insert(rows);

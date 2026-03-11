@@ -12,6 +12,58 @@ export interface TransacaoExtrato {
   amount: number; // positivo = crédito, negativo = débito
   type: "credit" | "debit";
   category?: string | null; // inferida pela descrição, em branco se não identificar
+  /** Número da parcela (ex.: 2 em 2/12). Preenchido quando a descrição indica parcelamento. */
+  parcela_numero?: number | null;
+  /** Total de parcelas (ex.: 12 em 2/12). Preenchido quando detectado. */
+  parcela_total?: number | null;
+}
+
+/**
+ * Tenta extrair número e total de parcelas da descrição (ex.: "PARC 2/12", "2 DE 12", "3ª parcela de 12").
+ * Retorna { numero, total } ou null se não identificar.
+ */
+export function extrairParcelaDaDescricao(description: string): { numero: number; total: number } | null {
+  const d = description.trim();
+  if (d.length < 3) return null;
+
+  const normalized = d.toUpperCase().replace(/\s+/g, " ");
+
+  // PARC 1/12, PARCELA 2/12, PAGTO PARC 3-12, PARC 3-12
+  const parcSlash = normalized.match(/\bPARC(?:ELA)?\s*(\d{1,3})\s*[\/\-]\s*(\d{1,3})\b/);
+  if (parcSlash) {
+    const numero = parseInt(parcSlash[1], 10);
+    const total = parseInt(parcSlash[2], 10);
+    if (numero >= 1 && total >= 1 && numero <= total) return { numero, total };
+  }
+
+  // 1/12 ou 2/12 quando há "parc" ou "parcela" na descrição (evita confundir com data)
+  if (/\bPARC(?:ELA)?\b/.test(normalized)) {
+    const slash = normalized.match(/\b(\d{1,3})\s*\/\s*(\d{1,3})\b/);
+    if (slash) {
+      const numero = parseInt(slash[1], 10);
+      const total = parseInt(slash[2], 10);
+      if (numero >= 1 && total >= 1 && numero <= total) return { numero, total };
+    }
+  }
+
+  // 2 DE 12, PARCELA 1 DE 12
+  const deMatch = normalized.match(/\b(?:PARC(?:ELA)?\s*)?(\d{1,3})\s+DE\s+(\d{1,3})\b/);
+  if (deMatch) {
+    const numero = parseInt(deMatch[1], 10);
+    const total = parseInt(deMatch[2], 10);
+    if (numero >= 1 && total >= 1 && numero <= total) return { numero, total };
+  }
+
+  // 3ª PARCELA DE 12, 3 PARCELA DE 12
+  const ordMatch = normalized.match(/\b(\d{1,3})[ª]?\s*PARCELA\s*(?:DE\s*)?(\d{1,3})?\b/);
+  if (ordMatch) {
+    const numero = parseInt(ordMatch[1], 10);
+    const total = ordMatch[2] ? parseInt(ordMatch[2], 10) : null;
+    if (numero >= 1 && (total == null || (total >= 1 && numero <= total)))
+      return { numero, total: total ?? numero };
+  }
+
+  return null;
 }
 
 /**
@@ -240,12 +292,14 @@ export function parseExtratoTexto(texto: string): TransacaoExtrato[] {
         : Math.abs(valorInfo.value);
 
     const category = inferirCategoria(description);
+    const parcela = extrairParcelaDaDescricao(description);
     transacoes.push({
       date,
       description,
       amount,
       type,
       ...(category ? { category } : {}),
+      ...(parcela ? { parcela_numero: parcela.numero, parcela_total: parcela.total } : {}),
     });
   }
 
@@ -319,6 +373,7 @@ function parseExtratoTextoFallback(texto: string): TransacaoExtrato[] {
     const type = sign === "+" ? "credit" : "debit";
     const amount = type === "debit" ? -Math.abs(value) : Math.abs(value);
     const category = inferirCategoria(description);
+    const parcela = extrairParcelaDaDescricao(description);
 
     transacoes.push({
       date: lastDate,
@@ -326,6 +381,7 @@ function parseExtratoTextoFallback(texto: string): TransacaoExtrato[] {
       amount,
       type,
       ...(category ? { category } : {}),
+      ...(parcela ? { parcela_numero: parcela.numero, parcela_total: parcela.total } : {}),
     });
   }
 

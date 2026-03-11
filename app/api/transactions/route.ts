@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("transactions")
-      .select("id, date, description, amount, type, category")
+      .select("id, date, description, amount, type, category, parcela_numero, parcela_total")
       .order("date", { ascending: false });
 
     if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
@@ -67,6 +67,8 @@ export async function POST(request: Request) {
     const amount = body.amount != null ? Number(body.amount) : null;
     const type = body.type === "credit" || body.type === "debit" ? body.type : null;
     const category = body.category != null ? (body.category ? String(body.category).slice(0, 100) : null) : null;
+    const parcelaNumero = body.parcela_numero != null ? (Number(body.parcela_numero) || null) : null;
+    const parcelaTotal = body.parcela_total != null ? (Number(body.parcela_total) || null) : null;
 
     if (!date || description === "" || amount === null || !type) {
       return NextResponse.json(
@@ -77,19 +79,23 @@ export async function POST(request: Request) {
 
     const externalId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+    const insertRow: Record<string, unknown> = {
+      account_id: accountId,
+      external_id: externalId,
+      date,
+      description,
+      raw_description: description,
+      amount: type === "debit" ? -Math.abs(amount) : Math.abs(amount),
+      type,
+      category,
+    };
+    if (parcelaNumero != null) insertRow.parcela_numero = parcelaNumero;
+    if (parcelaTotal != null) insertRow.parcela_total = parcelaTotal;
+
     const { data, error } = await supabase
       .from("transactions")
-      .insert({
-        account_id: accountId,
-        external_id: externalId,
-        date,
-        description,
-        raw_description: description,
-        amount: type === "debit" ? -Math.abs(amount) : Math.abs(amount),
-        type,
-        category,
-      })
-      .select("id, date, description, amount, type, category")
+      .insert(insertRow)
+      .select("id, date, description, amount, type, category, parcela_numero, parcela_total")
       .single();
 
     if (error) {

@@ -105,14 +105,7 @@ function LoginForm() {
             Cadastre-se
           </Link>
         </p>
-        <p className="mt-2 text-center text-sm text-zinc-500 dark:text-zinc-400">
-          <Link
-            href="/setup-admin"
-            className="font-medium text-zinc-600 hover:underline dark:text-zinc-400"
-          >
-            Criar usuário admin (uma vez)
-          </Link>
-        </p>
+        
       </div>
     </div>
   );
