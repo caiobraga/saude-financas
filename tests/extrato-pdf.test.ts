@@ -17,7 +17,6 @@ const COMPROVANTE_BB_ESPERADOS = [
   { date: "2026-03-02", amount: 1101, descriptionKey: "RUBIA CLEIA" },
   { date: "2026-03-02", amount: -55, descriptionKey: "Letícia" },
   { date: "2026-03-02", amount: 12000, descriptionKey: "IMAGEM R" },
-  { date: "2026-02-27", amount: 375.53, descriptionKey: "Saldo Anterior" },
 ];
 
 describe("extrato-pdf", () => {
@@ -68,7 +67,7 @@ describe("extrato-pdf", () => {
 
   describe("outros PDFs (fixtures)", () => {
     it("pode adicionar mais fixtures em tests/fixtures/*.txt e expectativas em COMPROVANTE_BB_ESPERADOS ou novos arrays", () => {
-      expect(COMPROVANTE_BB_ESPERADOS.length).toBe(8);
+      expect(COMPROVANTE_BB_ESPERADOS.length).toBe(7);
     });
   });
 });

@@ -102,7 +102,7 @@ function inferirCategoria(description: string): string | null {
   return null;
 }
 
-/** Cabeçalhos e rótulos de seção que não são lançamentos (não inclui Saldo Anterior / Encargos) */
+/** Cabeçalhos e rótulos de seção que não são lançamentos. Inclui padrões de vários bancos. */
 const SKIP_DESCRIPTION_PATTERNS = [
   /^lançamentos\s*$/i,
   /^dia\s+lot/i,
@@ -113,11 +113,20 @@ const SKIP_DESCRIPTION_PATTERNS = [
   /^total\s+aplicações/i,
   /^\s*saldo\s*$/i,
   /^\s*saldo\s+do\s+dia\s*$/i,
+  /^\s*saldo\s+anterior\b/i,
   /^\s*extrato\s+de\s+conta/i,
   /^cliente\s+/i,
   /^período\s*:/i,
   /^agência\s*:/i,
   /^conta\s*:/i,
+  /^associado\s*:/i,
+  /^cooperativa\s*:/i,
+  /^data\s+descrição/i,
+  /^descrição\s+documento/i,
+  /valor\s*\(\s*r\s*\$?\s*\)/i,
+  /saldo\s*\(\s*r\s*\$?\s*\)/i,
+  /^extrato\s*\(/i,
+  /sicredi\s+fone|sac\s+\d|ouvidoria\s+\d/i,
 ];
 
 function shouldSkipDescription(desc: string): boolean {
@@ -418,19 +427,98 @@ function extrairSecaoLancamentos(texto: string): string {
 }
 
 /**
- * Parse com fallback: usa só a seção Lançamentos.
- * Quando o texto vem em uma única linha, o parser por linhas acha só o último valor (ex.: SALDO).
- * Por isso: se há poucas quebras de linha, usa direto o fallback; senão tenta por linhas e, se
- * o fallback achar mais transações, usa o fallback.
+ * Parser genérico para extratos em que cada transação começa com data (dd/mm/yyyy) e termina
+ * com valor e saldo (ex.: Sicredi: "05/02/2026 DESCRICAO ... -534,00 5.016,89").
+ * Usa o penúltimo número como valor da transação e o último como saldo (ignorado).
+ */
+function parseExtratoPorDataNoInicio(texto: string): TransacaoExtrato[] {
+  const normalized = texto.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
+  const transacoes: TransacaoExtrato[] = [];
+  const dataRegex = /(\d{1,2})\s*[\/\-]\s*(\d{1,2})\s*[\/\-]\s*(\d{2,4})\b/g;
+  const valorRegex = /(-?\d{1,3}(?:\.\d{3})*,\d{2})/g;
+
+  let match: RegExpExecArray | null;
+  const indicesData: number[] = [];
+  while ((match = dataRegex.exec(normalized)) !== null) {
+    indicesData.push(match.index);
+  }
+
+  for (let i = 0; i < indicesData.length; i++) {
+    const start = indicesData[i];
+    const end = i + 1 < indicesData.length ? indicesData[i + 1] : normalized.length;
+    const chunk = normalized.slice(start, end).trim();
+    const dataMatch = chunk.match(/^(\d{1,2})\s*[\/\-]\s*(\d{1,2})\s*[\/\-]\s*(\d{2,4})/);
+    if (!dataMatch) continue;
+
+    const [, d, m, y] = dataMatch;
+    const year = y.length === 2 ? (parseInt(y, 10) >= 50 ? `19${y}` : `20${y}`) : y;
+    const date = `${year}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    if (date.length !== 10) continue;
+
+    const resto = chunk.slice(dataMatch[0].length).trim();
+    const numeros: { value: number; index: number }[] = [];
+    let vm: RegExpExecArray | null;
+    valorRegex.lastIndex = 0;
+    while ((vm = valorRegex.exec(resto)) !== null) {
+      const n = parseValorBrasileiro(vm[1]);
+      if (n !== null) numeros.push({ value: n, index: vm.index });
+    }
+    if (numeros.length === 0) continue;
+
+    const amountValue = numeros.length >= 2 ? numeros[numeros.length - 2].value : numeros[numeros.length - 1].value;
+    const indexDoValor = numeros.length >= 2 ? numeros[numeros.length - 2].index : numeros[numeros.length - 1].index;
+    const descPart = resto.slice(0, indexDoValor).trim().replace(/\s+/g, " ").slice(0, 200);
+    const description = limparDescricao(descPart || "Movimentação");
+    if (shouldSkipDescription(description)) continue;
+    if (descPart.length < 2) continue;
+
+    const type: "credit" | "debit" = amountValue >= 0 ? "credit" : "debit";
+    const amount = type === "debit" ? -Math.abs(amountValue) : Math.abs(amountValue);
+    const category = inferirCategoria(description);
+    const parcela = extrairParcelaDaDescricao(description);
+
+    transacoes.push({
+      date,
+      description,
+      amount,
+      type,
+      ...(category ? { category } : {}),
+      ...(parcela ? { parcela_numero: parcela.numero, parcela_total: parcela.total } : {}),
+    });
+  }
+
+  const seen = new Set<string>();
+  const unicas = transacoes.filter((t) => {
+    const key = `${t.date}|${t.description.slice(0, 50)}|${t.amount}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  unicas.sort((a, b) => a.date.localeCompare(b.date));
+  return unicas;
+}
+
+/**
+ * Parse com fallback: tenta vários formatos (BB com Lançamentos, texto colado com (+)/(-),
+ * e formato genérico com data no início da linha e valor/saldo no fim — ex.: Sicredi).
  */
 export function parseExtratoTextoComFallback(texto: string): TransacaoExtrato[] {
   const soLancamentos = extrairSecaoLancamentos(texto);
   const linhas = soLancamentos.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const fallback = parseExtratoTextoFallback(soLancamentos);
 
+  let resultado: TransacaoExtrato[];
   if (linhas.length <= 2) {
-    return fallback;
+    resultado = fallback;
+  } else {
+    const porLinhas = parseExtratoTexto(soLancamentos);
+    resultado = fallback.length >= porLinhas.length ? fallback : porLinhas;
   }
-  const porLinhas = parseExtratoTexto(soLancamentos);
-  return fallback.length >= porLinhas.length ? fallback : porLinhas;
+
+  if (resultado.length === 0) {
+    const porDataNoInicio = parseExtratoPorDataNoInicio(texto);
+    if (porDataNoInicio.length > 0) return porDataNoInicio;
+  }
+
+  return resultado;
 }
