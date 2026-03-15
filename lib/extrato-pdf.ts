@@ -114,6 +114,9 @@ const SKIP_DESCRIPTION_PATTERNS = [
   /^\s*saldo\s*$/i,
   /^\s*saldo\s+do\s+dia\s*$/i,
   /^\s*saldo\s+anterior\b/i,
+  /^\s*saldo\s+bloq\.?\s*anterior\b/i,
+  /^\s*histórico\s+de\s+movimenta[çc][aã]o\s*$/i,
+  /^data\s+histórico\s+valor\s*$/i,
   /^\s*extrato\s+de\s+conta/i,
   /^cliente\s+/i,
   /^período\s*:/i,
@@ -127,6 +130,16 @@ const SKIP_DESCRIPTION_PATTERNS = [
   /saldo\s*\(\s*r\s*\$?\s*\)/i,
   /^extrato\s*\(/i,
   /sicredi\s+fone|sac\s+\d|ouvidoria\s+\d/i,
+  // Bloco RESUMO / saldo do dia com saldo em conta (não é lançamento)
+  /saldo\s+do\s+dia\s+[\d.,]+\s*[CD]\s+resumo/i,
+  /resumo\s*\(\s*[+\-]?\s*\)\s*saldo\s+em\s+conta/i,
+  /saldo\s+em\s+conta\s*:/i,
+  /cheque\s+especial\s+contratado/i,
+  /juros\s+vencidos\s+provisionados/i,
+  /tarifas\s+vencidas\s+provisionadas/i,
+  /saldo\s+dispo/i,
+  // Fragmentos de linha (parte de descrição quebrada)
+  /^juros\s+cta\s+garantida$/i,
 ];
 
 function shouldSkipDescription(desc: string): boolean {
@@ -134,6 +147,11 @@ function shouldSkipDescription(desc: string): boolean {
   if (t.length < 2) return true;
   if (t.replace(/\s+/g, "").toUpperCase() === "SALDO") return true;
   if (/^saldo\s+do\s+dia$/i.test(t.replace(/\s+/g, " "))) return true;
+  // Descrição que é bloco de cabeçalho (segmento mal cortado no SICOOB: data do período + header)
+  if (/^histórico\s+de\s+movimenta[çc][aã]o\s+data\s+histórico\s+valor/i.test(t)) return true;
+  // Bloco "SALDO DO DIA X RESUMO (+) SALDO EM CONTA..." inteiro
+  if (/saldo\s+do\s+dia\s+[\d.,]+[CD]\s+resumo/i.test(t)) return true;
+  if (/\([+\-]\)\s*saldo\s+em\s+conta/i.test(t)) return true;
   return SKIP_DESCRIPTION_PATTERNS.some((p) => p.test(t));
 }
 
@@ -158,6 +176,28 @@ function extrairData(str: string): string | null {
   const month = m.padStart(2, "0");
   const day = d.padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Extrai ano de referência do texto (ex.: PERÍODO: 01/02/2026 - 28/02/2026 ou primeira data dd/mm/yyyy).
+ */
+function getReferenceYearFromText(texto: string): number {
+  const periodo = texto.match(/per[ií]odo\s*:\s*\d{1,2}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*(\d{4})/i);
+  if (periodo) return parseInt(periodo[1], 10);
+  const fullDate = texto.match(/(\d{1,2})\s*[\/\-]\s*(\d{1,2})\s*[\/\-]\s*(\d{4})\b/);
+  if (fullDate) return parseInt(fullDate[3], 10);
+  return new Date().getFullYear();
+}
+
+/**
+ * Data apenas dd/mm no início da linha (ex.: SICOOB "02/02 CRÉD.TRANSF... 10,00C").
+ * Usa ano de referência do extrato.
+ */
+function extrairDataDdMmSo(line: string, referenceYear: number): string | null {
+  const match = line.match(/^(\d{1,2})\s*[\/\-]\s*(\d{1,2})(?:\s|$)/);
+  if (!match) return null;
+  const [, d, m] = match;
+  return `${referenceYear}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 
 /**
@@ -187,7 +227,29 @@ function extrairValorComSinal(
 }
 
 /**
+ * Valor com sufixo C (crédito) ou D (débito), ex.: SICOOB "10,00C" ou "9.150,01D".
+ */
+function extrairValorComSufixoCD(
+  line: string
+): { value: number; index: number; sign: "+" | "-" } | null {
+  const regex = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])(?:\s|$|\*)/gi;
+  let last: { value: number; index: number; sign: "+" | "-" } | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(line)) !== null) {
+    const n = parseValorBrasileiro(m[1]);
+    if (n !== null)
+      last = {
+        value: n,
+        index: m.index,
+        sign: m[2].toUpperCase() === "C" ? "+" : "-",
+      };
+  }
+  return last;
+}
+
+/**
  * Encontra o último valor monetário em formato brasileiro (1.234,56 ou -1.234,56).
+ * Aceita sufixo C/D (crédito/débito) como em extratos SICOOB.
  */
 function extrairValorDaLine(line: string): {
   value: number;
@@ -196,6 +258,9 @@ function extrairValorDaLine(line: string): {
 } | null {
   const comSinal = extrairValorComSinal(line);
   if (comSinal) return comSinal;
+
+  const comCD = extrairValorComSufixoCD(line);
+  if (comCD) return comCD;
 
   const regex = /(-?\d{1,3}(?:\.\d{3})*,\d{2})/g;
   let last: { value: number; index: number } | null = null;
@@ -228,16 +293,74 @@ function limparDescricao(s: string, maxLen = 200): string {
 }
 
 /**
+ * Junta linhas de continuação: linhas que não começam com data (dd/mm ou dd/mm/yyyy)
+ * são anexadas à linha anterior, pois no PDF a transação pode quebrar em várias linhas.
+ */
+function juntarLinhasContinuacao(linhas: string[]): string[] {
+  // Linha inicia com data (dd/mm ou dd/mm/yyyy) → nova transação; senão → continuação da anterior
+  const dataNoInicio = /^\d{1,2}\s*[\/\-]\s*\d{1,2}(?:\s|$|[\/\-]\s*\d)/;
+  const resultado: string[] = [];
+  for (const line of linhas) {
+    const t = line.trim();
+    if (!t) continue;
+    if (resultado.length > 0 && !dataNoInicio.test(t)) {
+      resultado[resultado.length - 1] += " " + t;
+    } else {
+      resultado.push(t);
+    }
+  }
+  return resultado;
+}
+
+/**
+ * Quando o PDF vem em uma única linha com várias transações (ex.: SICOOB),
+ * divide em "linhas virtuais" por transação (cada uma começa com dd/mm sem ano).
+ * Só divide em dd/mm quando após a data não vem ano (evita quebrar "01/02/2026" do cabeçalho).
+ */
+function expandirLinhasComMultiplasTransacoes(linhas: string[]): string[] {
+  const resultado: string[] = [];
+  // dd/mm (sem dígito antes) seguido de espaço e que NÃO seja início de ano → só "30/01 " ou "02/02 "
+  const padraoDataInicio = /(?<!\d)(?=\d{1,2}\s*[\/\-]\s*\d{1,2}\s+(?![0-9]{2}))/g;
+  const temValorCD = /\d{1,3}(?:\.\d{3})*,\d{2}\s*[CD]/i;
+
+  for (const line of linhas) {
+    const multiplosCD = line.match(/\d{1,3}(?:\.\d{3})*,\d{2}\s*[CD]/gi);
+    const deveDividir = (multiplosCD?.length ?? 0) > 1 && line.length > 80;
+
+    if (!deveDividir) {
+      resultado.push(line);
+      continue;
+    }
+
+    const partes = line.split(padraoDataInicio).map((p) => p.trim()).filter(Boolean);
+    for (const p of partes) {
+      if (!/^\d{1,2}\s*[\/\-]\s*\d{1,2}\s+/.test(p)) continue;
+      // Ignora datas completas do cabeçalho (ex.: 01/02/2026 ou 28/02/2026 em "PERÍODO:")
+      if (/^\d{1,2}\s*[\/\-]\s*\d{1,2}\s*\d{4}\b/.test(p)) continue;
+      if (!temValorCD.test(p)) continue;
+      resultado.push(p);
+    }
+  }
+
+  return resultado.length > 0 ? resultado : linhas;
+}
+
+/**
  * Parse do texto extraído do PDF. Suporta:
  * - BB: data na linha, valor com "(+)" ou "(-)", descrição na mesma linha ou na seguinte
  * - Outros: data e valor na mesma linha, formato 1.234,56
+ * - SICOOB: uma linha com muitas transações (dd/mm ... valor C/D) — expandida antes do parse
  */
 export function parseExtratoTexto(texto: string): TransacaoExtrato[] {
-  const linhas = texto
+  let linhas = texto
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
 
+  linhas = juntarLinhasContinuacao(linhas);
+  linhas = expandirLinhasComMultiplasTransacoes(linhas);
+
+  const referenceYear = getReferenceYearFromText(texto);
   const transacoes: TransacaoExtrato[] = [];
   let lastDate: string | null = null;
   let pendingDescription: string[] = []; // linhas sem valor que podem ser descrição da próxima transação
@@ -246,25 +369,43 @@ export function parseExtratoTexto(texto: string): TransacaoExtrato[] {
     const line = linhas[i];
     const valorInfo = extrairValorDaLine(line);
     if (!valorInfo) {
-      // Só usa como lastDate se a data estiver no início da linha (evita "28/02 09:47" em descrições)
+      // Data no início: dd/mm/yyyy ou dd/mm (SICOOB)
       const dataStr = /^\s*\d{1,2}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{2,4}\b/.test(line)
         ? extrairData(line)
-        : null;
+        : /^\s*\d{1,2}\s*[\/\-]\s*\d{1,2}(?:\s|$)/.test(line)
+          ? extrairDataDdMmSo(line, referenceYear)
+          : null;
       if (dataStr) lastDate = dataStr;
       if (line.length > 2 && !/^\d[\d\s\/\-\.]*$/.test(line))
         pendingDescription.push(line);
       continue;
     }
 
-    const dataStr = extrairData(line);
+    const dataStr = extrairData(line) ?? extrairDataDdMmSo(line, referenceYear);
     const date = dataStr ?? lastDate ?? "";
     if (dataStr) lastDate = dataStr;
 
     const antesValor = line.substring(0, valorInfo.index).trim();
     let descPart = antesValor
       .replace(/^\d{1,2}\s*[\/\-]\s*\d{1,2}\s*[\/\-]\s*\d{2,4}\s*/, "")
+      .replace(/^\d{1,2}\s*[\/\-]\s*\d{1,2}\s+/, "") // dd/mm só (SICOOB)
       .replace(/\s{2,}/g, " ")
       .trim();
+
+    // No blob SICOOB a "continuação" da transação vem depois do valor (ex.: "10,00C 3047 - 637762258 EDIMARA ALVES DE ALMEIDA DOC.: 1707768718"); só aplica quando o valor tem sufixo C/D
+    if (/\d{1,3}(?:\.\d{3})*,\d{2}\s*[CD]\b/i.test(line)) {
+      const restFromValor = line.slice(valorInfo.index);
+      const valueMatch = restFromValor.match(/^(\d{1,3}(?:\.\d{3})*,\d{2})\s*([CD])(?:\s|$|\*)/i);
+      const valueLen = valueMatch ? valueMatch[0].length : 0;
+      const depoisValor = line.substring(valorInfo.index + valueLen).trim();
+      const continuacaoAteProximaData = depoisValor.replace(
+        /\s*\d{1,2}\s*[\/\-]\s*\d{1,2}\s+(?![0-9]{2}).*$/,
+        ""
+      ).trim();
+      if (continuacaoAteProximaData.length > 0 && (descPart.length < 50 || /^[A-Z][A-Z\s\.\-]+$/.test(descPart))) {
+        descPart = (descPart + " " + continuacaoAteProximaData).replace(/\s{2,}/g, " ").trim().slice(0, 200);
+      }
+    }
 
     const descIsOnlyNumbers = /^[\d\s\/\-\.]+$/.test(descPart);
     if ((descPart.length < 3 || descIsOnlyNumbers) && pendingDescription.length > 0) {
@@ -504,16 +645,11 @@ function parseExtratoPorDataNoInicio(texto: string): TransacaoExtrato[] {
  */
 export function parseExtratoTextoComFallback(texto: string): TransacaoExtrato[] {
   const soLancamentos = extrairSecaoLancamentos(texto);
-  const linhas = soLancamentos.split(/\r?\n/).filter((l) => l.trim().length > 0);
   const fallback = parseExtratoTextoFallback(soLancamentos);
+  const porLinhas = parseExtratoTexto(soLancamentos); // expande blob (ex.: SICOOB 1 linha → várias)
 
-  let resultado: TransacaoExtrato[];
-  if (linhas.length <= 2) {
-    resultado = fallback;
-  } else {
-    const porLinhas = parseExtratoTexto(soLancamentos);
-    resultado = fallback.length >= porLinhas.length ? fallback : porLinhas;
-  }
+  const resultado: TransacaoExtrato[] =
+    fallback.length >= porLinhas.length ? fallback : porLinhas;
 
   if (resultado.length === 0) {
     const porDataNoInicio = parseExtratoPorDataNoInicio(texto);
@@ -521,4 +657,53 @@ export function parseExtratoTextoComFallback(texto: string): TransacaoExtrato[] 
   }
 
   return resultado;
+}
+
+/**
+ * Converte transações para CSV (tabela), facilitando leitura e importação em planilhas.
+ * Colunas: Data, Descrição, Valor, Tipo, Categoria, Parcela.
+ */
+export function transacoesParaCSV(transacoes: TransacaoExtrato[]): string {
+  const escape = (s: string) => {
+    const t = String(s).replace(/"/g, '""');
+    return t.includes(",") || t.includes("\n") || t.includes('"') ? `"${t}"` : t;
+  };
+  const header = "Data,Descrição,Valor,Tipo,Categoria,Parcela";
+  const rows = transacoes.map((t) => {
+    const parcela =
+      t.parcela_numero != null && t.parcela_total != null
+        ? `${t.parcela_numero}/${t.parcela_total}`
+        : "";
+    return [
+      t.date,
+      escape(t.description),
+      t.amount.toFixed(2).replace(".", ","),
+      t.type === "credit" ? "Crédito" : "Débito",
+      escape(t.category ?? ""),
+      parcela,
+    ].join(",");
+  });
+  return [header, ...rows].join("\n");
+}
+
+/**
+ * Versão de debug: retorna cada etapa do pipeline (linhas brutas, após merge, após expandir, transações).
+ * Útil para inspecionar como o PDF é interpretado e padronizar o reconhecimento.
+ */
+export function parseExtratoTextoDebug(texto: string): {
+  rawLines: string[];
+  afterMerge: string[];
+  afterExpand: string[];
+  transacoes: TransacaoExtrato[];
+} {
+  const rawLines = texto
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const afterMerge = juntarLinhasContinuacao(rawLines);
+  const afterExpand = expandirLinhasComMultiplasTransacoes(afterMerge);
+  const transacoes = parseExtratoTexto(texto); // usa o fluxo completo (merge + expand interno)
+
+  return { rawLines, afterMerge, afterExpand, transacoes };
 }

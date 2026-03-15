@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { extractText } from "unpdf";
-import { parseExtratoTextoComFallback, type TransacaoExtrato } from "@/lib/extrato-pdf";
+import { parsePdfExtrato, type TransacaoExtrato } from "@/lib/parse-pdf-extrato";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
+/**
+ * Mesma lógica de identificação do Debug (PDF em tabela): parsePdfExtrato usa
+ * parseExtratoTextoComFallback (juntar linhas, expandir blob, C/D, continuação após valor).
+ */
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -18,6 +21,7 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
+    const preview = formData.get("preview") === "1" || formData.get("preview") === "true";
 
     if (!file || file.type !== "application/pdf") {
       return NextResponse.json(
@@ -27,9 +31,8 @@ export async function POST(request: Request) {
     }
 
     const buffer = new Uint8Array(await file.arrayBuffer());
+    const { texto, transacoes, csv } = await parsePdfExtrato(buffer);
 
-    const { text } = await extractText(buffer, { mergePages: true });
-    const texto = text ?? "";
     if (!texto.trim()) {
       return NextResponse.json(
         { error: "Não foi possível extrair texto do PDF. O arquivo pode estar em imagem ou protegido." },
@@ -37,12 +40,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const transacoes = parseExtratoTextoComFallback(texto).filter((t) => t.date.length === 10);
     if (transacoes.length === 0) {
       return NextResponse.json(
         { error: "Nenhuma transação encontrada no PDF. O formato do extrato pode não ser suportado." },
         { status: 400 }
       );
+    }
+
+    if (preview) {
+      return NextResponse.json({
+        preview: true,
+        count: transacoes.length,
+        transacoes,
+        csv,
+      });
     }
 
     const PDF_LINK_ID = "pdf-import";

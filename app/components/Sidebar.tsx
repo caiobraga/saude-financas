@@ -11,6 +11,7 @@ const nav = [
   { href: "/dashboard/planilhas", label: "Planilhas" },
   { href: "/dashboard/contas", label: "Contas" },
   { href: "/dashboard/importar-extrato", label: "Importar extrato PDF" },
+  { href: "/dashboard/debug", label: "Debug extrato" },
   { href: "/dashboard/perfil", label: "Perfil" },
   { href: "/dashboard/planos", label: "Planos" },
 ];

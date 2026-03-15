@@ -65,6 +65,100 @@ describe("extrato-pdf", () => {
     });
   });
 
+  describe("formato SICOOB (data dd/mm sem ano, valor com C/D)", () => {
+    it("extrai transações quando há PERÍODO no texto e linhas com dd/mm e valor C ou D", () => {
+      const texto = [
+        "SICOOB PLATAFORMA EXTRATO CONTA CORRENTE",
+        "PERÍODO: 01/02/2026 - 28/02/2026",
+        "HISTÓRICO DE MOVIMENTAÇÃO",
+        "DATA HISTÓRICO VALOR",
+        "02/02 CRÉD.TRANSF.POU.INT 10,00C",
+        "02/02 PIX RECEB.OUTRA IF 175,00C Recebimento Pix FERNANDA",
+        "02/02 PIX EMIT.OUTRA IF 100,00D Pagamento Pix",
+        "02/02 SALDO DO DIA 1.563,45D",
+      ].join("\n");
+
+      const transacoes = parseExtratoTextoComFallback(texto);
+
+      // Não deve importar SALDO DO DIA
+      const saldoDia = transacoes.find((t) =>
+        /saldo\s+do\s+dia/i.test(t.description)
+      );
+      expect(saldoDia).toBeUndefined();
+
+      // Deve ter 3 transações (10 C, 175 C, 100 D)
+      expect(transacoes.length).toBe(3);
+
+      const cred10 = transacoes.find((t) => t.amount === 10 && t.date === "2026-02-02");
+      const cred175 = transacoes.find((t) => t.amount === 175 && t.date === "2026-02-02");
+      const deb100 = transacoes.find((t) => t.amount === -100 && t.date === "2026-02-02");
+
+      expect(cred10).toBeDefined();
+      expect(cred175).toBeDefined();
+      expect(deb100).toBeDefined();
+    });
+
+    it("extrai várias transações quando o PDF vem em uma única linha (blobo SICOOB)", () => {
+      // Simula PDF em que o texto é uma linha só, sem quebras entre transações
+      const umaLinha =
+        "SICOOB EXTRATO PERÍODO: 01/02/2026 - 28/02/2026 HISTÓRICO DE MOVIMENTAÇÃO DATA HISTÓRICO VALOR " +
+        "30/01 SALDO ANTERIOR 9.150,01D " +
+        "30/01 SALDO BLOQ.ANTERIOR 0,00* " +
+        "02/02 CRÉD.TRANSF.POU.INT 10,00C " +
+        "02/02 PIX RECEB.OUTRA IF 175,00C " +
+        "02/02 PIX EMIT.OUTRA IF 100,00D " +
+        "02/02 SALDO DO DIA 1.563,45D " +
+        "03/02 DÉB.CONV.DEM.EMPRES 1.637,76D " +
+        "04/02 PIX RECEB.OUTRA IF 48,00C ";
+
+      const transacoes = parseExtratoTextoComFallback(umaLinha);
+
+      // Não importa saldos
+      expect(transacoes.find((t) => /saldo\s+anterior/i.test(t.description))).toBeUndefined();
+      expect(transacoes.find((t) => /saldo\s+do\s+dia/i.test(t.description))).toBeUndefined();
+
+      // Deve expandir a linha e extrair 5 transações (10, 175, -100, -1637.76, 48)
+      expect(transacoes.length).toBe(5);
+
+      expect(transacoes.find((t) => t.amount === 10 && t.date === "2026-02-02")).toBeDefined();
+      expect(transacoes.find((t) => t.amount === 175 && t.date === "2026-02-02")).toBeDefined();
+      expect(transacoes.find((t) => t.amount === -100 && t.date === "2026-02-02")).toBeDefined();
+      expect(transacoes.find((t) => t.amount === -1637.76 && t.date === "2026-02-03")).toBeDefined();
+      expect(transacoes.find((t) => t.amount === 48 && t.date === "2026-02-04")).toBeDefined();
+    });
+
+    it("junta linhas de continuação quando a transação quebra em várias linhas", () => {
+      const texto = [
+        "PERÍODO: 01/02/2026 - 28/02/2026",
+        "02/02 PIX RECEB.OUTRA IF 175,00C",
+        "Recebimento Pix FERNANDA DE CASSIA SANTANA",
+        "02/02 PIX EMIT.OUTRA IF 100,00D",
+        "Pagamento Pix ***.023.176-**",
+      ].join("\n");
+
+      const transacoes = parseExtratoTextoComFallback(texto);
+
+      expect(transacoes.length).toBe(2);
+      const cred175 = transacoes.find((t) => t.amount === 175);
+      const deb100 = transacoes.find((t) => t.amount === -100);
+      expect(cred175?.description).toMatch(/FERNANDA|PIX RECEB/i);
+      expect(deb100?.description).toMatch(/PIX EMIT|Pagamento/i);
+    });
+
+    it("inclui continuação após o valor no blob SICOOB (ex.: conta, nome, DOC)", () => {
+      const blob =
+        "PERÍODO: 01/02/2026 - 28/02/2026 " +
+        "02/02 CRÉD.TRANSF.POU.INT 10,00C 3047 - 637762258 EDIMARA ALVES DE ALMEIDA DOC.: 1707768718 " +
+        "02/02 PIX EMIT.OUTRA IF 100,00D Pagamento Pix";
+
+      const transacoes = parseExtratoTextoComFallback(blob);
+
+      const cred10 = transacoes.find((t) => t.amount === 10 && t.date === "2026-02-02");
+      expect(cred10).toBeDefined();
+      expect(cred10!.description).toMatch(/EDIMARA|637762258|1707768718/i);
+    });
+  });
+
   describe("outros PDFs (fixtures)", () => {
     it("pode adicionar mais fixtures em tests/fixtures/*.txt e expectativas em COMPROVANTE_BB_ESPERADOS ou novos arrays", () => {
       expect(COMPROVANTE_BB_ESPERADOS.length).toBe(7);
