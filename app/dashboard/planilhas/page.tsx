@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { getSubcategoria, ordenarSubcategorias } from "@/lib/categorias";
 
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -29,6 +30,7 @@ type Transaction = {
   amount: number;
   type: string;
   category: string | null;
+  subcategoria?: string | null;
   parcela_numero?: number | null;
   parcela_total?: number | null;
 };
@@ -125,18 +127,31 @@ function PlanilhasContent() {
   const totalDespesas = totalProlabore + totalDespesasOutras;
   const resultado = totalReceitas - totalDespesas;
 
-  const despesasOutrasPorCategoria = despesasOutras.reduce<Record<string, Transaction[]>>((acc, t) => {
+  const despesasPorSubcategoria = despesasOutras.reduce<Record<string, Record<string, Transaction[]>>>((acc, t) => {
+    const sub = t.subcategoria ?? getSubcategoria(t.category);
     const cat = (t.category && t.category.trim()) || "Outras despesas";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(t);
+    if (!acc[sub]) acc[sub] = {};
+    if (!acc[sub][cat]) acc[sub][cat] = [];
+    acc[sub][cat].push(t);
     return acc;
   }, {});
-
-  const categoriasOrdenadas = Object.keys(despesasOutrasPorCategoria).sort((a, b) => {
-    const sumA = despesasOutrasPorCategoria[a].reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-    const sumB = despesasOutrasPorCategoria[b].reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-    return sumB - sumA;
-  });
+  const subcategoriasOrdenadas = ordenarSubcategorias(Object.keys(despesasPorSubcategoria));
+  const linhasCategoriaSubcategoria: { subcategoria: string; categoria: string; total: number }[] = [];
+  type CasaRow = { type: "sub"; name: string } | { type: "cat"; categoria: string; total: number };
+  const casaRows: CasaRow[] = [];
+  for (const sub of subcategoriasOrdenadas) {
+    const cats = Object.keys(despesasPorSubcategoria[sub] ?? {}).sort((a, b) => {
+      const sumA = (despesasPorSubcategoria[sub][a] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+      const sumB = (despesasPorSubcategoria[sub][b] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+      return sumB - sumA;
+    });
+    casaRows.push({ type: "sub", name: sub });
+    for (const cat of cats) {
+      const total = (despesasPorSubcategoria[sub][cat] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+      linhasCategoriaSubcategoria.push({ subcategoria: sub, categoria: cat, total });
+      casaRows.push({ type: "cat", categoria: cat, total });
+    }
+  }
 
   const despesasPorCategoria = debits.reduce<Record<string, Transaction[]>>((acc, t) => {
     const cat = (t.category && t.category.trim()) || "Outras despesas";
@@ -150,6 +165,27 @@ function PlanilhasContent() {
     const sumB = despesasPorCategoria[b].reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
     return sumB - sumA;
   });
+  const despesasPorSubcategoriaTab = debits.reduce<Record<string, Record<string, Transaction[]>>>((acc, t) => {
+    const sub = t.subcategoria ?? getSubcategoria(t.category);
+    const cat = (t.category && t.category.trim()) || "Outras despesas";
+    if (!acc[sub]) acc[sub] = {};
+    if (!acc[sub][cat]) acc[sub][cat] = [];
+    acc[sub][cat].push(t);
+    return acc;
+  }, {});
+  const subcategoriasDespesasOrdenadas = ordenarSubcategorias(Object.keys(despesasPorSubcategoriaTab));
+  const linhasDespesasSubcategoria: { subcategoria: string; categoria: string; total: number }[] = [];
+  for (const sub of subcategoriasDespesasOrdenadas) {
+    const cats = Object.keys(despesasPorSubcategoriaTab[sub] ?? {}).sort((a, b) => {
+      const sumA = (despesasPorSubcategoriaTab[sub][a] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+      const sumB = (despesasPorSubcategoriaTab[sub][b] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+      return sumB - sumA;
+    });
+    for (const cat of cats) {
+      const total = (despesasPorSubcategoriaTab[sub][cat] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+      linhasDespesasSubcategoria.push({ subcategoria: sub, categoria: cat, total });
+    }
+  }
 
   const receitasPorCategoria = receitas.reduce<Record<string, Transaction[]>>((acc, t) => {
     const cat = (t.category && t.category.trim()) || "Outras receitas";
@@ -204,77 +240,145 @@ function PlanilhasContent() {
     : `${new Date(from + "T12:00:00").toLocaleDateString("pt-BR")} a ${new Date(to + "T12:00:00").toLocaleDateString("pt-BR")}`;
 
   async function downloadXls() {
-    const mod = await import("xlsx");
-    const XLSX = "default" in mod && mod.default ? mod.default : mod;
-    const wb = XLSX.utils.book_new();
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
 
-    const resumoData = [
-      ["Resumo gerencial"],
-      ["Receitas", formatCurrency(totalReceitas)],
-      ["Despesas operacionais + Impostos + Fornecedores", formatCurrency(totalDespesasOutras)],
-      ["Retiradas sócio", formatCurrency(totalProlabore)],
-      ["Resultado", formatCurrency(resultado)],
+    type CasaRow = { type: "sub"; name: string } | { type: "cat"; categoria: string; total: number };
+    const HEADER_GREEN_XLS = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF93C47D" } };
+    const colWidths = [
+      { width: 22 }, { width: 10 }, { width: 12 }, { width: 4 }, { width: 4 },
+      { width: 20 }, { width: 14 }, { width: 12 }, { width: 24 }, { width: 20 }, { width: 12 },
     ];
-    wb.SheetNames.push("Resumo");
-    wb.Sheets["Resumo"] = XLSX.utils.aoa_to_sheet(resumoData);
 
-    const receitasTemParcela = hasParcelaAlguma(receitas);
-    const receitasData = [
-      receitasTemParcela ? ["Data", "Descrição", "Parcela", "Valor"] : ["Data", "Descrição", "Valor"],
-      ...receitas.sort((a, b) => a.date.localeCompare(b.date)).map((t) =>
-        receitasTemParcela
-          ? [formatDateShort(t.date), t.description, t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "", formatCurrency(Number(t.amount))]
-          : [formatDateShort(t.date), t.description, formatCurrency(Number(t.amount))]
-      ),
-      [],
-      receitasTemParcela ? ["Total", "", "", formatCurrency(totalReceitas)] : ["Total", "", formatCurrency(totalReceitas)],
-    ];
-    wb.SheetNames.push("Receitas");
-    wb.Sheets["Receitas"] = XLSX.utils.aoa_to_sheet(receitasData);
+    function buildCasaRowsForMonth(monthTransactions: Transaction[]): CasaRow[] {
+      const debitsMonth = monthTransactions.filter((t) => t.type === "debit");
+      const despesasOutrasMonth = debitsMonth.filter((t) => !isProLabore(t));
+      const despesasPorSub = despesasOutrasMonth.reduce<Record<string, Record<string, Transaction[]>>>((acc, t) => {
+        const sub = t.subcategoria ?? getSubcategoria(t.category);
+        const cat = (t.category && t.category.trim()) || "Outras despesas";
+        if (!acc[sub]) acc[sub] = {};
+        if (!acc[sub][cat]) acc[sub][cat] = [];
+        acc[sub][cat].push(t);
+        return acc;
+      }, {});
+      const subsOrdered = ordenarSubcategorias(Object.keys(despesasPorSub));
+      const rows: CasaRow[] = [];
+      for (const sub of subsOrdered) {
+        const cats = Object.keys(despesasPorSub[sub] ?? {}).sort((a, b) => {
+          const sumA = (despesasPorSub[sub][a] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+          const sumB = (despesasPorSub[sub][b] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+          return sumB - sumA;
+        });
+        rows.push({ type: "sub", name: sub });
+        for (const cat of cats) {
+          const total = (despesasPorSub[sub][cat] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+          rows.push({ type: "cat", categoria: cat, total });
+        }
+      }
+      return rows;
+    }
 
-    const prolaboreTemParcela = hasParcelaAlguma(prolabore);
-    const prolaboreData = [
-      prolaboreTemParcela ? ["Data", "Descrição", "Parcela", "Valor"] : ["Data", "Descrição", "Valor"],
-      ...prolabore.sort((a, b) => a.date.localeCompare(b.date)).map((t) =>
-        prolaboreTemParcela
-          ? [formatDateShort(t.date), t.description, t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "", "-" + formatCurrency(Math.abs(Number(t.amount)))]
-          : [formatDateShort(t.date), t.description, "-" + formatCurrency(Math.abs(Number(t.amount)))]
-      ),
-      [],
-      prolaboreTemParcela ? ["Total retiradas sócio", "", "", formatCurrency(totalProlabore)] : ["Total retiradas sócio", "", formatCurrency(totalProlabore)],
-    ];
-    wb.SheetNames.push("Pro-labore");
-    wb.Sheets["Pro-labore"] = XLSX.utils.aoa_to_sheet(prolaboreData);
+    // Lista de meses no período (from .. to) para uma aba cada: [ { year, month }, ... ]
+    const monthsInRange: { year: number; month: number }[] = [];
+    const [fromY, fromM] = from.split("-").map(Number);
+    const [toY, toM] = to.split("-").map(Number);
+    for (let y = fromY; y <= toY; y++) {
+      const startM = y === fromY ? fromM : 1;
+      const endM = y === toY ? toM : 12;
+      for (let m = startM; m <= endM; m++) {
+        monthsInRange.push({ year: y, month: m });
+      }
+    }
 
-    const despesasTemParcela = hasParcelaAlguma(despesasOutras);
-    const despesasRows: (string | number)[][] = [
-      despesasTemParcela ? ["Data", "Descrição", "Parcela", "Valor", "Categoria"] : ["Data", "Descrição", "Valor", "Categoria"],
-      ...despesasOutras
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map((t) =>
-          despesasTemParcela
-            ? [
-                formatDateShort(t.date),
-                t.description,
-                t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "",
-                "-" + formatCurrency(Math.abs(Number(t.amount))),
-                (t.category && t.category.trim()) || "Outras despesas",
-              ]
-            : [
-                formatDateShort(t.date),
-                t.description,
-                "-" + formatCurrency(Math.abs(Number(t.amount))),
-                (t.category && t.category.trim()) || "Outras despesas",
-              ]
-        ),
-      [],
-      despesasTemParcela ? ["Total despesas operacionais", "", "", formatCurrency(totalDespesasOutras), ""] : ["Total despesas operacionais", "", formatCurrency(totalDespesasOutras), ""],
-    ];
-    wb.SheetNames.push("Despesas");
-    wb.Sheets["Despesas"] = XLSX.utils.aoa_to_sheet(despesasRows);
+    for (const { year, month } of monthsInRange) {
+      const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+      const inMonth = (t: Transaction) => t.date >= monthStart && t.date <= monthEnd;
+      const txMonth = transactions.filter(inMonth);
+      const receitasMonth = txMonth.filter((t) => t.type === "credit");
+      const debitsMonth = txMonth.filter((t) => t.type === "debit");
+      const prolaboreMonth = debitsMonth.filter(isProLabore);
+      const despesasOutrasMonth = debitsMonth.filter((t) => !isProLabore(t));
+      const totalReceitasMonth = receitasMonth.reduce((s, t) => s + Number(t.amount), 0);
+      const totalDespesasMonth = prolaboreMonth.reduce((s, t) => s + Math.abs(Number(t.amount)), 0)
+        + despesasOutrasMonth.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+      const resultadoMonth = totalReceitasMonth - totalDespesasMonth;
 
-    const nomeArquivo = `planilha_${from}_${to}.xls`;
-    XLSX.writeFile(wb, nomeArquivo, { bookType: "xls", bookSST: true });
+      const casaRowsMonth = buildCasaRowsForMonth(txMonth);
+      const receitasOrdenadasMonth = [...receitasMonth].sort((a, b) => a.date.localeCompare(b.date));
+
+      // Nome da aba: MM/AA (Excel não aceita /, usamos -)
+      const sheetName = `${String(month).padStart(2, "0")}-${String(year).slice(-2)}`;
+      const ws = wb.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1 }] });
+      ws.columns = colWidths;
+
+      let row = 1;
+      ws.mergeCells(row, 6, row, 7);
+      ws.getCell(row, 6).value = "RECEITA";
+      ws.getCell(row, 6).fill = HEADER_GREEN_XLS;
+      ws.mergeCells(row, 9, row, 10);
+      ws.getCell(row, 9).value = "DESPESA";
+      ws.getCell(row, 9).fill = HEADER_GREEN_XLS;
+      row++;
+
+      const maxDataRows = Math.max(casaRowsMonth.length, receitasOrdenadasMonth.length, 1);
+      for (let i = 0; i < maxDataRows; i++) {
+        if (i < casaRowsMonth.length) {
+          const item = casaRowsMonth[i];
+          if (item.type === "sub") {
+            ws.mergeCells(row, 1, row, 3);
+            ws.getCell(row, 1).value = item.name;
+            ws.getCell(row, 1).fill = HEADER_GREEN_XLS;
+          } else {
+            ws.getCell(row, 1).value = item.categoria;
+            ws.getCell(row, 3).value = item.total;
+            ws.getCell(row, 3).numFmt = '"R$"#,##0.00';
+          }
+        }
+        if (i < receitasOrdenadasMonth.length) {
+          const t = receitasOrdenadasMonth[i];
+          ws.getCell(row, 6).value = t.description;
+          ws.getCell(row, 7).value = Number(t.amount);
+          ws.getCell(row, 7).numFmt = '"R$"#,##0.00';
+          ws.getCell(row, 8).value =
+            t.parcela_numero != null && t.parcela_total != null
+              ? `${t.parcela_numero}/${t.parcela_total}`
+              : "";
+        }
+        if (i < casaRowsMonth.length) {
+          const item = casaRowsMonth[i];
+          if (item.type === "sub") {
+            ws.mergeCells(row, 9, row, 10);
+            ws.getCell(row, 9).value = item.name;
+            ws.getCell(row, 9).fill = HEADER_GREEN_XLS;
+          } else {
+            ws.getCell(row, 9).value = item.categoria;
+            ws.getCell(row, 10).value = item.total;
+            ws.getCell(row, 10).numFmt = '"R$"#,##0.00';
+          }
+        }
+        row++;
+      }
+
+      ws.getCell(row, 6).value = "TOTAL";
+      ws.getCell(row, 6).fill = HEADER_GREEN_XLS;
+      ws.getCell(row, 7).value = totalReceitasMonth;
+      ws.getCell(row, 7).numFmt = '"R$"#,##0.00';
+      ws.getCell(row, 9).value = totalDespesasMonth;
+      ws.getCell(row, 9).numFmt = '"R$"#,##0.00';
+      ws.getCell(row, 10).value = resultadoMonth;
+      ws.getCell(row, 10).numFmt = '"R$"#,##0.00';
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `planilha_${from}_${to}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -378,7 +482,7 @@ function PlanilhasContent() {
             onClick={downloadXls}
             className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-700 dark:hover:bg-zinc-600"
           >
-            Baixar .xls
+            Baixar .xlsx
           </button>
         </div>
       </div>
@@ -489,22 +593,32 @@ function PlanilhasContent() {
             </section>
           )}
 
-          {/* 3. Despesas Operacionais por categoria */}
+          {/* 3. Despesas Operacionais por subcategoria e categoria */}
           <section className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
               3️⃣ Despesas operacionais
             </h2>
-            {categoriasOrdenadas.length === 0 ? (
+            {subcategoriasOrdenadas.length === 0 ? (
               <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Nenhuma despesa categorizada no período (exceto pró-labore).</p>
             ) : (
-              <div className="mt-4 space-y-6">
-                {categoriasOrdenadas.map((cat) => {
-                  const itens = despesasOutrasPorCategoria[cat];
+              <div className="mt-4 space-y-8">
+                {subcategoriasOrdenadas.map((sub) => {
+                  const catsNaSub = Object.keys(despesasPorSubcategoria[sub] ?? {}).sort((a, b) => {
+                    const sumA = (despesasPorSubcategoria[sub][a] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+                    const sumB = (despesasPorSubcategoria[sub][b] ?? []).reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+                    return sumB - sumA;
+                  });
+                  return (
+                    <div key={sub}>
+                      <h3 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">{sub}</h3>
+                      <div className="mt-3 space-y-4">
+                {catsNaSub.map((cat) => {
+                  const itens = despesasPorSubcategoria[sub][cat] ?? [];
                   const totalCat = itens.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
                   const showParcela = hasParcelaAlguma(itens);
                   return (
                     <div key={cat}>
-                      <h3 className="text-sm font-medium text-zinc-600 dark:text-zinc-400">{cat}</h3>
+                      <h4 className="text-sm font-medium text-zinc-600 dark:text-zinc-400">{cat}</h4>
                       <div className="mt-2 overflow-x-auto">
                         <table className="w-full min-w-[320px] border-collapse text-sm">
                           <thead>
@@ -540,6 +654,10 @@ function PlanilhasContent() {
                       <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                         Total {cat}: {formatCurrency(totalCat)}
                       </p>
+                    </div>
+                  );
+                })}
+                      </div>
                     </div>
                   );
                 })}
@@ -586,9 +704,9 @@ function PlanilhasContent() {
           {aba === "despesas" && (
           <section className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
-              Gastos por categoria (% do total de despesas)
+              Gastos por subcategoria e categoria (% do total de despesas)
             </h2>
-            {categoriasDespesasOrdenadas.length === 0 ? (
+            {linhasDespesasSubcategoria.length === 0 ? (
               <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Nenhuma despesa no período.</p>
             ) : (
               <>
@@ -596,19 +714,19 @@ function PlanilhasContent() {
                   <table className="w-full min-w-[320px] border-collapse text-sm">
                     <thead>
                       <tr className="border-b border-zinc-200 dark:border-zinc-700">
+                        <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Subcategoria</th>
                         <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Categoria</th>
                         <th className="pb-2 pr-4 text-right font-medium text-zinc-600 dark:text-zinc-400">Valor</th>
                         <th className="pb-2 text-right font-medium text-zinc-600 dark:text-zinc-400">%</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {categoriasDespesasOrdenadas.map((cat) => {
-                        const itens = despesasPorCategoria[cat];
-                        const totalCat = itens.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+                      {linhasDespesasSubcategoria.map(({ subcategoria, categoria, total: totalCat }) => {
                         const pct = totalDespesas > 0 ? (totalCat / totalDespesas) * 100 : 0;
                         return (
-                          <tr key={cat} className="border-b border-zinc-100 dark:border-zinc-800">
-                            <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{cat}</td>
+                          <tr key={`${subcategoria}-${categoria}`} className="border-b border-zinc-100 dark:border-zinc-800">
+                            <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{subcategoria}</td>
+                            <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{categoria}</td>
                             <td className="py-2 pr-4 text-right font-medium text-red-600 dark:text-red-400">
                               {formatCurrency(totalCat)}
                             </td>

@@ -28,6 +28,7 @@ export async function PATCH(
     if (body.amount != null) updates.amount = Number(body.amount);
     if (body.type != null && (body.type === "credit" || body.type === "debit")) updates.type = body.type;
     if (body.category != null) updates.category = body.category ? String(body.category).slice(0, 100) : null;
+    if (body.subcategoria != null) updates.subcategoria = body.subcategoria ? String(body.subcategoria).slice(0, 50) : null;
     if (body.parcela_numero !== undefined) updates.parcela_numero = body.parcela_numero == null || body.parcela_numero === "" ? null : Math.max(1, Math.floor(Number(body.parcela_numero)));
     if (body.parcela_total !== undefined) updates.parcela_total = body.parcela_total == null || body.parcela_total === "" ? null : Math.max(1, Math.floor(Number(body.parcela_total)));
 
@@ -39,7 +40,7 @@ export async function PATCH(
       .from("transactions")
       .update(updates)
       .eq("id", id)
-      .select("id, date, description, amount, type, category, parcela_numero, parcela_total")
+      .select("id, date, description, amount, type, category, subcategoria, parcela_numero, parcela_total")
       .single();
 
     if (error) {

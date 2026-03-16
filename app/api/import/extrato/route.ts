@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { parsePdfExtrato, type TransacaoExtrato } from "@/lib/parse-pdf-extrato";
+import { getSubcategoria } from "@/lib/categorias";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -124,6 +125,7 @@ export async function POST(request: Request) {
       amount: t.amount,
       type: t.type,
       category: t.category ?? null,
+      subcategoria: getSubcategoria(t.category ?? null),
       parcela_numero: t.parcela_numero ?? null,
       parcela_total: t.parcela_total ?? null,
     }));

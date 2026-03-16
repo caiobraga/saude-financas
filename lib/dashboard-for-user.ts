@@ -97,7 +97,7 @@ export async function getTransactionsForUser(
 
   const { data, error } = await admin
     .from("transactions")
-    .select("id, date, description, amount, type, category, account_id, parcela_numero, parcela_total")
+    .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total")
     .eq("user_id", uid)
     .order("date", { ascending: orderAsc });
 
@@ -106,6 +106,6 @@ export async function getTransactionsForUser(
     throw new Error(`Erro ao buscar transações: ${error.message}`);
   }
 
-  const all = (data ?? []) as Array<{ id: string; date: string; description: string; amount: number; type: string; category: string | null; account_id: string; parcela_numero: number | null; parcela_total: number | null }>;
+  const all = (data ?? []) as Array<{ id: string; date: string; description: string; amount: number; type: string; category: string | null; subcategoria: string | null; account_id: string; parcela_numero: number | null; parcela_total: number | null }>;
   return options?.limit ? all.slice(0, options.limit) : all;
 }

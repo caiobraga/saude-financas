@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from("transactions")
-      .select("id, date, description, amount, type, category, parcela_numero, parcela_total")
+      .select("id, date, description, amount, type, category, subcategoria, parcela_numero, parcela_total")
       .order("date", { ascending: false });
 
     if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
@@ -67,6 +67,7 @@ export async function POST(request: Request) {
     const amount = body.amount != null ? Number(body.amount) : null;
     const type = body.type === "credit" || body.type === "debit" ? body.type : null;
     const category = body.category != null ? (body.category ? String(body.category).slice(0, 100) : null) : null;
+    const subcategoria = body.subcategoria != null ? (body.subcategoria ? String(body.subcategoria).slice(0, 50) : null) : null;
     const parcelaNumero = body.parcela_numero != null ? (Number(body.parcela_numero) || null) : null;
     const parcelaTotal = body.parcela_total != null ? (Number(body.parcela_total) || null) : null;
 
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
       amount: type === "debit" ? -Math.abs(amount) : Math.abs(amount),
       type,
       category,
+      subcategoria: subcategoria ?? null,
     };
     if (parcelaNumero != null) insertRow.parcela_numero = parcelaNumero;
     if (parcelaTotal != null) insertRow.parcela_total = parcelaTotal;
@@ -95,7 +97,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("transactions")
       .insert(insertRow)
-      .select("id, date, description, amount, type, category, parcela_numero, parcela_total")
+      .select("id, date, description, amount, type, category, subcategoria, parcela_numero, parcela_total")
       .single();
 
     if (error) {

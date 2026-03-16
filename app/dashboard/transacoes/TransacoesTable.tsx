@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { getSubcategoria, SUBCATEGORIAS } from "@/lib/categorias";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
@@ -25,6 +26,7 @@ type Transaction = {
   amount: number;
   type: string;
   category: string | null;
+  subcategoria: string | null;
   parcela_numero?: number | null;
   parcela_total?: number | null;
 };
@@ -57,6 +59,7 @@ export function TransacoesTable({
     type: "debit" as "credit" | "debit",
     amount: "",
     category: "",
+    subcategoria: "Variáveis" as string,
     parcela_numero: "" as string | number,
     parcela_total: "" as string | number,
   });
@@ -136,7 +139,7 @@ export function TransacoesTable({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao salvar");
       setTransactions((prev) =>
-        prev.map((t) => (t.id === editingId ? { ...t, ...data, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null } : t))
+        prev.map((t) => (t.id === editingId ? { ...t, ...data, category: data.category ?? null, subcategoria: data.subcategoria ?? null, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null } : t))
       );
       cancelEdit();
       router.refresh();
@@ -219,13 +222,14 @@ export function TransacoesTable({
           type: addForm.type,
           amount: Math.abs(amount),
           category: addForm.category.trim() || null,
+          subcategoria: addForm.subcategoria || null,
           parcela_numero: parcelaNumero ?? null,
           parcela_total: parcelaTotal ?? null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao criar");
-      setTransactions((prev) => [{ ...data, category: data.category ?? null, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null }, ...prev]);
+      setTransactions((prev) => [{ ...data, category: data.category ?? null, subcategoria: data.subcategoria ?? null, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null }, ...prev]);
       setShowAddModal(false);
       setAddForm({
         account_id: accounts[0]?.id ?? "",
@@ -234,6 +238,7 @@ export function TransacoesTable({
         type: "debit",
         amount: "",
         category: "",
+        subcategoria: "Variáveis",
         parcela_numero: "",
         parcela_total: "",
       });
@@ -374,6 +379,11 @@ export function TransacoesTable({
           )}
         </div>
       )}
+      <datalist id="categories-datalist">
+        {categories.map((cat) => (
+          <option key={cat} value={cat} />
+        ))}
+      </datalist>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-left text-sm">
           <thead>
@@ -395,6 +405,9 @@ export function TransacoesTable({
               </th>
               <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
                 Categoria
+              </th>
+              <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+                Subcategoria
               </th>
               {showParcelaColumn && (
                 <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
@@ -442,16 +455,32 @@ export function TransacoesTable({
                     <td className="px-4 py-2">
                       <input
                         type="text"
+                        list="categories-datalist"
                         value={editForm.category ?? ""}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const v = e.target.value;
                           setEditForm((f) => ({
                             ...f,
-                            category: e.target.value || undefined,
-                          }))
-                        }
-                        placeholder="—"
+                            category: v || undefined,
+                            subcategoria: getSubcategoria(v || null),
+                          }));
+                        }}
+                        placeholder="Digite ou selecione"
                         className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
                       />
+                    </td>
+                    <td className="px-4 py-2">
+                      <select
+                        value={editForm.subcategoria ?? "Variáveis"}
+                        onChange={(e) =>
+                          setEditForm((f) => ({ ...f, subcategoria: e.target.value }))
+                        }
+                        className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                      >
+                        {SUBCATEGORIAS.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
                     </td>
                     {showParcelaColumn && (
                       <td className="px-4 py-2">
@@ -562,6 +591,9 @@ export function TransacoesTable({
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                       {t.category ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
+                      {t.subcategoria ?? getSubcategoria(t.category)}
                     </td>
                     {showParcelaColumn && (
                       <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
@@ -706,11 +738,31 @@ export function TransacoesTable({
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Categoria (opcional)</label>
                 <input
                   type="text"
+                  list="categories-datalist"
                   value={addForm.category}
-                  onChange={(e) => setAddForm((f) => ({ ...f, category: e.target.value }))}
-                  placeholder="Ex: Alimentação"
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setAddForm((f) => ({
+                      ...f,
+                      category: v,
+                      subcategoria: getSubcategoria(v || null),
+                    }));
+                  }}
+                  placeholder="Digite ou selecione (ex: Alimentação)"
                   className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Subcategoria</label>
+                <select
+                  value={addForm.subcategoria}
+                  onChange={(e) => setAddForm((f) => ({ ...f, subcategoria: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                >
+                  {SUBCATEGORIAS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Parcela (opcional)</label>
