@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 type TransacaoPreview = {
   date: string;
@@ -11,8 +12,12 @@ type TransacaoPreview = {
   category?: string | null;
 };
 
+type Account = { id: string; name: string };
+
 export default function ImportarExtratoPage() {
   const router = useRouter();
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountId, setAccountId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +26,23 @@ export default function ImportarExtratoPage() {
     transacoes: TransacaoPreview[];
     csv: string;
   } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/accounts")
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setAccounts(list);
+        if (list.length > 0 && !accountId) setAccountId(list[0].id);
+      })
+      .catch(() => setAccounts([]));
+  }, []);
+
+  useEffect(() => {
+    if (accounts.length > 0 && accountId && !accounts.some((a) => a.id === accountId)) {
+      setAccountId(accounts[0].id);
+    }
+  }, [accounts, accountId]);
 
   async function handlePreview(e: React.FormEvent) {
     e.preventDefault();
@@ -65,10 +87,15 @@ export default function ImportarExtratoPage() {
       setError("Selecione um arquivo PDF.");
       return;
     }
+    if (!accountId.trim()) {
+      setError("Selecione a conta de destino. Crie uma conta em Contas se necessário.");
+      return;
+    }
     setLoading(true);
     try {
       const formData = new FormData();
       formData.set("file", file);
+      formData.set("account_id", accountId.trim());
 
       const res = await fetch("/api/import/extrato", {
         method: "POST",
@@ -109,14 +136,49 @@ export default function ImportarExtratoPage() {
       </h1>
       <p className="mt-1 text-zinc-500 dark:text-zinc-400">
         Envie um PDF de extrato bancário. As transações serão extraídas e
-        sincronizadas com suas contas. Funciona melhor com extratos em texto
-        (não escaneados).
+        adicionadas à conta que você escolher. Vários PDFs podem ser importados na mesma conta.
       </p>
+
+      {accounts.length === 0 && (
+        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            Crie pelo menos uma conta em{" "}
+            <Link href="/dashboard/contas" className="font-medium underline">
+              Contas
+            </Link>{" "}
+            antes de importar um extrato. As transações do PDF serão vinculadas à conta que você selecionar.
+          </p>
+        </div>
+      )}
 
       <form
         onSubmit={handleSubmit}
         className="mt-8 max-w-md space-y-4 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900"
       >
+        <div>
+          <label
+            htmlFor="account"
+            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Importar para a conta
+          </label>
+          <select
+            id="account"
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            required
+            disabled={accounts.length === 0}
+            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white disabled:opacity-60"
+          >
+            <option value="">Selecione a conta</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Vários extratos podem ser importados na mesma conta.
+          </p>
+        </div>
         <div>
           <label
             htmlFor="file"
@@ -156,7 +218,7 @@ export default function ImportarExtratoPage() {
           <button
             type="submit"
             onClick={handleSubmit}
-            disabled={loading || !file}
+            disabled={loading || !file || !accountId || accounts.length === 0}
             className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
           >
             {loading ? "Importando..." : "Importar extrato"}

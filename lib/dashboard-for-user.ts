@@ -57,6 +57,7 @@ export async function getConnectionsWithAccountsForUser(admin: SupabaseClient, u
     .from("bank_connections")
     .select("id, institution, status")
     .eq("user_id", userId)
+    .neq("institution", "Extrato PDF")
     .order("connected_at", { ascending: false });
   if (!connections?.length) return [];
   const result: Array<{

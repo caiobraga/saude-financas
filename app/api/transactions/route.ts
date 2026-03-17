@@ -16,10 +16,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from"); // YYYY-MM-DD
     const to = searchParams.get("to"); // YYYY-MM-DD
+    const accountId = searchParams.get("account_id"); // opcional: filtrar por conta
 
     let query = supabase
       .from("transactions")
-      .select("id, date, description, amount, type, category, subcategoria, parcela_numero, parcela_total")
+      .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total")
       .order("date", { ascending: false });
 
     if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
@@ -27,6 +28,9 @@ export async function GET(request: Request) {
     }
     if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
       query = query.lte("date", to);
+    }
+    if (accountId && accountId.trim()) {
+      query = query.eq("account_id", accountId.trim());
     }
 
     const { data, error } = await query;
@@ -55,12 +59,10 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const accountId = body?.account_id ?? body?.accountId;
-    if (!accountId || typeof accountId !== "string") {
-      return NextResponse.json(
-        { error: "account_id é obrigatório" },
-        { status: 400 }
-      );
-    }
+    const accountIdOrNull =
+      accountId != null && typeof accountId === "string" && accountId.trim()
+        ? accountId.trim()
+        : null;
 
     const date = body.date != null ? String(body.date).slice(0, 10) : null;
     const description = body.description != null ? String(body.description).slice(0, 500) : "";
@@ -81,7 +83,7 @@ export async function POST(request: Request) {
     const externalId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
     const insertRow: Record<string, unknown> = {
-      account_id: accountId,
+      account_id: accountIdOrNull,
       external_id: externalId,
       date,
       description,
@@ -97,7 +99,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("transactions")
       .insert(insertRow)
-      .select("id, date, description, amount, type, category, subcategoria, parcela_numero, parcela_total")
+      .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total")
       .single();
 
     if (error) {

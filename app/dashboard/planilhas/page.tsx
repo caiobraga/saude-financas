@@ -85,6 +85,8 @@ function PlanilhasContent() {
     return d.toISOString().slice(0, 10);
   });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
+  const [accountFilter, setAccountFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,7 +102,9 @@ function PlanilhasContent() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/transactions?from=${from}&to=${to}`);
+      const params = new URLSearchParams({ from, to });
+      if (accountFilter && accountFilter.trim()) params.set("account_id", accountFilter.trim());
+      const res = await fetch(`/api/transactions?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao carregar");
       setTransactions(Array.isArray(data) ? data : []);
@@ -110,7 +114,14 @@ function PlanilhasContent() {
     } finally {
       setLoading(false);
     }
-  }, [from, to]);
+  }, [from, to, accountFilter]);
+
+  useEffect(() => {
+    fetch("/api/accounts")
+      .then((r) => r.json())
+      .then((data) => setAccounts(Array.isArray(data) ? data : []))
+      .catch(() => setAccounts([]));
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -390,7 +401,19 @@ function PlanilhasContent() {
         Extrato organizado por categorias para o período selecionado. Use as categorias nas transações para agrupar aqui.
       </p>
 
-      <div className="mt-6 flex flex-wrap items-center gap-4">
+      {/* Barra de período e filtro por conta */}
+      <div className="sticky top-14 z-20 -mx-4 mt-6 flex flex-wrap items-center gap-4 overflow-visible bg-zinc-100 px-4 py-3 dark:bg-zinc-950 md:static md:z-auto md:mx-0 md:bg-transparent md:py-0 md:dark:bg-transparent">
+        <select
+          value={accountFilter}
+          onChange={(e) => setAccountFilter(e.target.value)}
+          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+          aria-label="Conta"
+        >
+          <option value="">Todas as contas</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Período:</span>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -417,11 +440,12 @@ function PlanilhasContent() {
           </button>
         </div>
         {mode === "month" ? (
-          <>
+          <div className="flex flex-wrap items-center gap-2 overflow-visible">
             <select
               value={mes}
               onChange={(e) => updatePeriodMonth(ano, parseInt(e.target.value, 10))}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+              className="min-w-[7rem] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+              aria-label="Mês"
             >
               {MONTHS.map((label, i) => (
                 <option key={i} value={i + 1}>{label}</option>
@@ -430,15 +454,16 @@ function PlanilhasContent() {
             <select
               value={ano}
               onChange={(e) => updatePeriodMonth(parseInt(e.target.value, 10), mes)}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+              className="min-w-[5rem] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+              aria-label="Ano"
             >
               {anosDisponiveis.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
-          </>
+          </div>
         ) : (
-          <>
+          <div className="flex flex-wrap items-center gap-2 overflow-visible">
             <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
               De
               <input
@@ -457,7 +482,7 @@ function PlanilhasContent() {
                 className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
               />
             </label>
-          </>
+          </div>
         )}
         <span className="text-sm text-zinc-500 dark:text-zinc-400">
           {periodoLabel}

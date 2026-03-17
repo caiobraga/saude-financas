@@ -57,63 +57,25 @@ export async function POST(request: Request) {
       });
     }
 
-    const PDF_LINK_ID = "pdf-import";
-    const PDF_ACCOUNT_EXTERNAL_ID = "extrato";
-
-    let conn = (await supabase
-      .from("bank_connections")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("belvo_link_id", PDF_LINK_ID)
-      .single()).data;
-
-    if (!conn?.id) {
-      const { data: newConn, error: connError } = await supabase
-        .from("bank_connections")
-        .insert({
-          user_id: user.id,
-          belvo_link_id: PDF_LINK_ID,
-          institution: "Extrato PDF",
-          status: "active",
-        })
-        .select("id")
-        .single();
-      if (connError || !newConn?.id) {
-        return NextResponse.json(
-          { error: connError?.message ?? "Erro ao criar conexão" },
-          { status: 500 }
-        );
-      }
-      conn = newConn;
+    const accountId = formData.get("account_id") ?? formData.get("accountId");
+    if (!accountId || typeof accountId !== "string" || !accountId.trim()) {
+      return NextResponse.json(
+        { error: "Selecione a conta de destino para importar as transações." },
+        { status: 400 }
+      );
     }
 
-    let account = (await supabase
+    const { data: account, error: accError } = await supabase
       .from("accounts")
       .select("id")
-      .eq("connection_id", conn.id)
-      .eq("external_id", PDF_ACCOUNT_EXTERNAL_ID)
-      .single()).data;
+      .eq("id", accountId.trim())
+      .single();
 
-    if (!account?.id) {
-      const { data: newAccount, error: accError } = await supabase
-        .from("accounts")
-        .insert({
-          connection_id: conn.id,
-          external_id: PDF_ACCOUNT_EXTERNAL_ID,
-          name: "Extrato PDF",
-          type: "checking",
-          balance: 0,
-          last_synced_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
-      if (accError || !newAccount?.id) {
-        return NextResponse.json(
-          { error: accError?.message ?? "Erro ao obter conta" },
-          { status: 500 }
-        );
-      }
-      account = newAccount;
+    if (accError || !account?.id) {
+      return NextResponse.json(
+        { error: "Conta não encontrada ou sem permissão. Crie uma conta em Contas e selecione-a." },
+        { status: 400 }
+      );
     }
 
     const rows = transacoes.map((t: TransacaoExtrato) => ({
@@ -141,7 +103,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      connectionId: conn.id,
       accountId: account.id,
       count: transacoes.length,
     });

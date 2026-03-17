@@ -27,6 +27,7 @@ type Transaction = {
   type: string;
   category: string | null;
   subcategoria: string | null;
+  account_id: string | null;
   parcela_numero?: number | null;
   parcela_total?: number | null;
 };
@@ -52,6 +53,7 @@ export function TransacoesTable({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [accountFilter, setAccountFilter] = useState("");
   const [addForm, setAddForm] = useState({
     account_id: accounts[0]?.id ?? "",
     date: todayStr(),
@@ -78,8 +80,15 @@ export function TransacoesTable({
       t.description.toLowerCase().includes(searchQuery.trim().toLowerCase());
     const matchCategory =
       !categoryFilter || (t.category ?? "") === categoryFilter;
-    return matchSearch && matchCategory;
+    const matchAccount =
+      !accountFilter || (t.account_id ?? "") === accountFilter;
+    return matchSearch && matchCategory && matchAccount;
   });
+
+  function getAccountName(accountId: string | null): string {
+    if (!accountId) return "—";
+    return accounts.find((a) => a.id === accountId)?.name ?? "—";
+  }
 
   const selectableIds = filteredTransactions
     .filter((t) => editingId !== t.id)
@@ -110,6 +119,8 @@ export function TransacoesTable({
       amount: t.amount,
       type: t.type,
       category: t.category ?? undefined,
+      subcategoria: t.subcategoria ?? getSubcategoria(t.category),
+      account_id: t.account_id ?? undefined,
       parcela_numero: t.parcela_numero ?? undefined,
       parcela_total: t.parcela_total ?? undefined,
     });
@@ -139,7 +150,7 @@ export function TransacoesTable({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao salvar");
       setTransactions((prev) =>
-        prev.map((t) => (t.id === editingId ? { ...t, ...data, category: data.category ?? null, subcategoria: data.subcategoria ?? null, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null } : t))
+        prev.map((t) => (t.id === editingId ? { ...t, ...data, category: data.category ?? null, subcategoria: data.subcategoria ?? null, account_id: data.account_id ?? null, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null } : t))
       );
       cancelEdit();
       router.refresh();
@@ -197,8 +208,8 @@ export function TransacoesTable({
   }
 
   async function submitAdd() {
-    if (!addForm.account_id || !addForm.description.trim()) {
-      setError("Preencha a conta e a descrição.");
+    if (!addForm.description.trim()) {
+      setError("Preencha a descrição.");
       return;
     }
     const amount = parseFloat(addForm.amount.replace(",", "."));
@@ -216,7 +227,7 @@ export function TransacoesTable({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          account_id: addForm.account_id,
+          account_id: addForm.account_id && addForm.account_id.trim() ? addForm.account_id : null,
           date: addForm.date,
           description: addForm.description.trim(),
           type: addForm.type,
@@ -229,10 +240,10 @@ export function TransacoesTable({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao criar");
-      setTransactions((prev) => [{ ...data, category: data.category ?? null, subcategoria: data.subcategoria ?? null, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null }, ...prev]);
+      setTransactions((prev) => [{ ...data, category: data.category ?? null, subcategoria: data.subcategoria ?? null, account_id: data.account_id ?? null, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null }, ...prev]);
       setShowAddModal(false);
       setAddForm({
-        account_id: accounts[0]?.id ?? "",
+        account_id: (accountFilter || accounts[0]?.id) ?? "",
         date: todayStr(),
         description: "",
         type: "debit",
@@ -255,13 +266,11 @@ export function TransacoesTable({
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <button
           type="button"
-          title={accounts.length === 0 ? "Importe um extrato PDF ou conecte uma conta para poder adicionar transações" : undefined}
-          disabled={accounts.length === 0}
           onClick={() => {
-            if (accounts.length === 0) return;
             setShowAddModal(true);
             setError(null);
-            setAddForm((f) => ({ ...f, date: todayStr(), account_id: accounts[0]?.id ?? f.account_id }));
+            const defaultAccountId = (accountFilter || accounts[0]?.id) ?? "";
+            setAddForm((f) => ({ ...f, date: todayStr(), account_id: defaultAccountId }));
           }}
           className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-emerald-600"
         >
@@ -279,6 +288,16 @@ export function TransacoesTable({
 
       {transactions.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
+          <select
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+          >
+            <option value="">Todas as contas</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
           <input
             type="search"
             placeholder="Buscar por descrição..."
@@ -298,12 +317,13 @@ export function TransacoesTable({
               </option>
             ))}
           </select>
-          {(searchQuery.trim() || categoryFilter) && (
+          {(searchQuery.trim() || categoryFilter || accountFilter) && (
             <button
               type="button"
               onClick={() => {
                 setSearchQuery("");
                 setCategoryFilter("");
+                setAccountFilter("");
               }}
               className="text-sm text-zinc-600 hover:underline dark:text-zinc-400"
             >
@@ -404,6 +424,9 @@ export function TransacoesTable({
                 Descrição
               </th>
               <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+                Conta
+              </th>
+              <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
                 Categoria
               </th>
               <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
@@ -451,6 +474,20 @@ export function TransacoesTable({
                         }
                         className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
                       />
+                    </td>
+                    <td className="px-4 py-2">
+                      <select
+                        value={editForm.account_id ?? ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({ ...f, account_id: e.target.value || undefined }))
+                        }
+                        className="w-full min-w-[8rem] rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                      >
+                        <option value="">Nenhuma</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-4 py-2">
                       <input
@@ -590,6 +627,9 @@ export function TransacoesTable({
                       {t.description}
                     </td>
                     <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                      {getAccountName(t.account_id)}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                       {t.category ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
@@ -680,12 +720,13 @@ export function TransacoesTable({
             {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
             <div className="mt-4 space-y-3">
               <div>
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Conta</label>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Conta (opcional)</label>
                 <select
                   value={addForm.account_id}
                   onChange={(e) => setAddForm((f) => ({ ...f, account_id: e.target.value }))}
                   className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
                 >
+                  <option value="">Nenhuma</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}

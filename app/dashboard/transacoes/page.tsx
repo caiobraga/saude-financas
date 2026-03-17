@@ -17,7 +17,7 @@ export default async function TransacoesPage() {
   const cookieStore = await cookies();
   const viewAs = getViewAsFromCookies(cookieStore, isAdmin ?? false);
 
-  let transactions: Array<{ id: string; date: string; description: string; amount: number; type: string; category: string | null; subcategoria: string | null; account_id: string; parcela_numero: number | null; parcela_total: number | null }> = [];
+  let transactions: Array<{ id: string; date: string; description: string; amount: number; type: string; category: string | null; subcategoria: string | null; account_id: string | null; parcela_numero: number | null; parcela_total: number | null }> = [];
   let accounts: Array<{ id: string; name: string }> = [];
   let viewAsError: string | null = null;
 
@@ -38,7 +38,7 @@ export default async function TransacoesPage() {
         type: t.type,
         category: t.category ?? null,
         subcategoria: t.subcategoria ?? null,
-        account_id: t.account_id,
+        account_id: t.account_id ?? null,
         parcela_numero: t.parcela_numero ?? null,
         parcela_total: t.parcela_total ?? null,
       }));
@@ -65,7 +65,7 @@ export default async function TransacoesPage() {
       type: t.type,
       category: t.category ?? null,
       subcategoria: t.subcategoria ?? null,
-      account_id: t.account_id ?? "",
+      account_id: t.account_id ?? null,
       parcela_numero: t.parcela_numero ?? null,
       parcela_total: t.parcela_total ?? null,
     }));
@@ -91,7 +91,7 @@ export default async function TransacoesPage() {
 
       {viewAs && !viewAsError && transactions.length === 0 && accounts.length === 0 && (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-          Este usuário ainda não tem contas conectadas nem transações. Os dados aparecerão aqui após conectar um banco ou importar um extrato.
+          Este usuário ainda não tem contas nem transações. Os dados aparecerão aqui após importar um extrato PDF.
         </div>
       )}
 
