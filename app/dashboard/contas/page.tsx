@@ -58,6 +58,56 @@ export default async function ContasPage() {
     }
   }
 
+  // Se não há integração bancária preenchendo `accounts.balance`,
+  // usa a soma das transações (amount já vem com sinal) como saldo/total.
+  const accountIds = accountsByConnection.flatMap((c) => c.accounts.map((a) => a.id));
+  if (accountIds.length > 0) {
+    const balancesByAccountId = new Map<string, number>();
+
+    if (viewAs) {
+      try {
+        const admin = createAdminClient();
+        const { data: txs, error } = await admin
+          .from("transactions")
+          .select("account_id, amount")
+          .eq("user_id", viewAs.userId)
+          .in("account_id", accountIds);
+        if (!error) {
+          for (const t of txs ?? []) {
+            const id = String((t as { account_id: string }).account_id);
+            const amount = Number((t as { amount: number }).amount ?? 0);
+            balancesByAccountId.set(id, (balancesByAccountId.get(id) ?? 0) + amount);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    } else {
+      try {
+        const { data: txs } = await supabase
+          .from("transactions")
+          .select("account_id, amount")
+          .in("account_id", accountIds);
+        for (const t of txs ?? []) {
+          const id = String((t as { account_id: string }).account_id);
+          const amount = Number((t as { amount: number }).amount ?? 0);
+          balancesByAccountId.set(id, (balancesByAccountId.get(id) ?? 0) + amount);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Preferir o saldo calculado quando existir (inclusive 0, se a conta tiver transações 0).
+    accountsByConnection = accountsByConnection.map(({ conn, accounts }) => ({
+      conn,
+      accounts: accounts.map((a) => {
+        const computed = balancesByAccountId.get(a.id);
+        return computed == null ? a : { ...a, balance: computed };
+      }),
+    }));
+  }
+
   return (
     <div className="p-4 sm:p-6 md:p-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
