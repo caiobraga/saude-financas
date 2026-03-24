@@ -1,0 +1,10 @@
+Resumo da fatura OUROCARD
+Fatura fechada em 08/01/2026
+Lançamentos nesta fatura
+Data Descrição País Valor
+22/12 OPENAI *CHATGPT SUBSCR OPENAI.COM CA R$ 114,73
+22/12 IOF - COMPRA NO EXTERIOR R$ 4,01
+23/01 FABRICADEMILH PARC 12/12 RIO DE JANEI BR R$ 110,09
+Subtotal R$ 2.152,57
+Total da Fatura R$ 2.152,57
+

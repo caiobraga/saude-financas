@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
     const {
@@ -12,6 +12,13 @@ export async function GET() {
     if (!user) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
+    const { searchParams } = new URL(request.url);
+    const typeFilter = searchParams.get("type");
+    const validType =
+      typeFilter === "credit" || typeFilter === "checking" || typeFilter === "savings"
+        ? typeFilter
+        : null;
+
     const { data: connections } = await supabase
       .from("bank_connections")
       .select("id")
@@ -20,15 +27,21 @@ export async function GET() {
     if (connectionIds.length === 0) {
       return NextResponse.json([]);
     }
-    const { data, error } = await supabase
+    let q = supabase
       .from("accounts")
-      .select("id, name")
+      .select("id, name, type")
       .in("connection_id", connectionIds)
       .order("name");
+    if (validType) q = q.eq("type", validType);
+    const { data, error } = await q;
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    return NextResponse.json(data ?? []);
+    const list = data ?? [];
+    if (validType) {
+      return NextResponse.json(list.map((a) => ({ id: a.id, name: a.name, type: a.type })));
+    }
+    return NextResponse.json(list.map((a) => ({ id: a.id, name: a.name })));
   } catch (err) {
     console.error("Accounts GET error:", err);
     return NextResponse.json(

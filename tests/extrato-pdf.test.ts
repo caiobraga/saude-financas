@@ -157,6 +157,37 @@ describe("extrato-pdf", () => {
       expect(cred10).toBeDefined();
       expect(cred10!.description).toMatch(/EDIMARA|637762258|1707768718/i);
     });
+
+    it("ignora variações de linhas de saldo (dia/final/em conta)", () => {
+      const texto = [
+        "PERÍODO: 01/02/2026 - 28/02/2026",
+        "02/02 PIX RECEB.OUTRA IF 175,00C",
+        "02/02 SALDO DO DIA 1.563,45C",
+        "03/02 PIX EMIT.OUTRA IF 100,00D",
+        "03/02 SALDO FINAL 1.463,45C",
+        "RESUMO (+) SALDO EM CONTA: 1.463,45",
+      ].join("\n");
+
+      const transacoes = parseExtratoTextoComFallback(texto);
+
+      expect(transacoes.find((t) => /saldo\s+do\s+dia/i.test(t.description))).toBeUndefined();
+      expect(transacoes.find((t) => /saldo\s+final/i.test(t.description))).toBeUndefined();
+      expect(transacoes.find((t) => /saldo\s+em\s+conta/i.test(t.description))).toBeUndefined();
+      expect(transacoes.length).toBe(2);
+    });
+
+    it("mantém transação quando saldo do dia vem colado na mesma linha", () => {
+      const texto = [
+        "PERÍODO: 01/02/2026 - 28/02/2026",
+        "03/02/2026 13105 20303 Pix - Enviado PEDRO MAXIMIANO DALAPICUL 300,00 (-) 00/00/0000 13105 Saldo do dia",
+      ].join("\n");
+
+      const transacoes = parseExtratoTextoComFallback(texto);
+      expect(transacoes.length).toBe(1);
+      expect(transacoes[0].date).toBe("2026-02-03");
+      expect(transacoes[0].amount).toBe(-300);
+      expect(transacoes[0].description).toMatch(/PEDRO MAXIMIANO DALAPICUL/i);
+    });
   });
 
   describe("outros PDFs (fixtures)", () => {

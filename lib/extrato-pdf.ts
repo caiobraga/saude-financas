@@ -156,6 +156,42 @@ function shouldSkipDescription(desc: string): boolean {
 }
 
 /**
+ * Ignora linhas/blocos de saldo que às vezes são interpretados como movimentação.
+ * Ex.: "SALDO DO DIA", "SALDO ANTERIOR", "SALDO FINAL", "SALDO EM CONTA".
+ */
+function shouldSkipBalanceContext(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  const normalized = t
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+  return (
+    /\bsaldo\s+do\s+dia\b/.test(normalized) ||
+    /\bsaldo\s+anterior\b/.test(normalized) ||
+    /\bsaldo\s+bloq\.?\s*anterior\b/.test(normalized) ||
+    /\bsaldo\s+final\b/.test(normalized) ||
+    /\bsaldo\s+em\s+conta\b/.test(normalized) ||
+    /\bsaldo\s+disponivel\b/.test(normalized) ||
+    /\bsaldo\s+bloqueado\b/.test(normalized)
+  );
+}
+
+/**
+ * Alguns PDFs colam "Saldo do dia/final" no fim da mesma linha de uma transação.
+ * Nesse caso, preservamos o início (lançamento) e cortamos apenas o trecho de saldo.
+ */
+function stripTrailingBalanceSegment(text: string): string {
+  const marker =
+    /\bsaldo\s+do\s+dia\b|\bsaldo\s+anterior\b|\bsaldo\s+bloq\.?\s*anterior\b|\bsaldo\s+final\b|\bsaldo\s+em\s+conta\b|\bsaldo\s+dispon[ií]vel\b|\bsaldo\s+bloqueado\b/i;
+  const match = marker.exec(text);
+  if (!match || match.index <= 0) return text;
+  return text.slice(0, match.index).trim();
+}
+
+/**
  * Converte valor no formato brasileiro (1.234,56 ou -1.234,56) para número.
  */
 function parseValorBrasileiro(str: string): number | null {
@@ -366,7 +402,9 @@ export function parseExtratoTexto(texto: string): TransacaoExtrato[] {
   let pendingDescription: string[] = []; // linhas sem valor que podem ser descrição da próxima transação
 
   for (let i = 0; i < linhas.length; i++) {
-    const line = linhas[i];
+    const lineOriginal = linhas[i];
+    const line = stripTrailingBalanceSegment(lineOriginal);
+    if (!line) continue;
     const valorInfo = extrairValorDaLine(line);
     if (!valorInfo) {
       // Data no início: dd/mm/yyyy ou dd/mm (SICOOB)
@@ -432,6 +470,7 @@ export function parseExtratoTexto(texto: string): TransacaoExtrato[] {
 
     const description = limparDescricao(descPart);
     if (shouldSkipDescription(description)) continue;
+    if (shouldSkipBalanceContext(description)) continue;
     if (!date || date.length !== 10) continue;
 
     const sign = valorInfo.sign;
@@ -461,7 +500,6 @@ export function parseExtratoTexto(texto: string): TransacaoExtrato[] {
     return true;
   });
 
-  unicas.sort((a, b) => a.date.localeCompare(b.date));
   return unicas;
 }
 
@@ -512,11 +550,16 @@ function parseExtratoTextoFallback(texto: string): TransacaoExtrato[] {
 
     // Descrição vem depois do valor quando colado: "375,53 (+)Saldo Anterior 02/03/2026"
     const idxProximaData = indexOfNextDate(depoisValor);
-    const descAposValor = (idxProximaData >= 0 ? depoisValor.slice(0, idxProximaData) : depoisValor).trim().replace(/\s+/g, " ").slice(0, 200);
+    const descAposValor = stripTrailingBalanceSegment(
+      (idxProximaData >= 0 ? depoisValor.slice(0, idxProximaData) : depoisValor)
+        .trim()
+        .replace(/\s+/g, " ")
+    ).slice(0, 200);
     const descAntesValor = antesValor.substring(lastDateEnd).trim().replace(/\s+/g, " ").slice(0, 200);
     const descPart = descAposValor || descAntesValor;
     const description = limparDescricao(descPart || "Movimentação");
     if (shouldSkipDescription(description)) continue;
+    if (shouldSkipBalanceContext(description)) continue;
     if (description.replace(/\s+/g, "").toUpperCase() === "SALDO") continue;
     if (description.replace(/\s+/g, " ").toUpperCase().trim() === "SALDO DO DIA") continue;
 
@@ -542,7 +585,6 @@ function parseExtratoTextoFallback(texto: string): TransacaoExtrato[] {
     seen.add(key);
     return true;
   });
-  unicas.sort((a, b) => a.date.localeCompare(b.date));
   return unicas;
 }
 
@@ -611,6 +653,7 @@ function parseExtratoPorDataNoInicio(texto: string): TransacaoExtrato[] {
     const descPart = resto.slice(0, indexDoValor).trim().replace(/\s+/g, " ").slice(0, 200);
     const description = limparDescricao(descPart || "Movimentação");
     if (shouldSkipDescription(description)) continue;
+    if (shouldSkipBalanceContext(description)) continue;
     if (descPart.length < 2) continue;
 
     const type: "credit" | "debit" = amountValue >= 0 ? "credit" : "debit";
@@ -635,7 +678,6 @@ function parseExtratoPorDataNoInicio(texto: string): TransacaoExtrato[] {
     seen.add(key);
     return true;
   });
-  unicas.sort((a, b) => a.date.localeCompare(b.date));
   return unicas;
 }
 

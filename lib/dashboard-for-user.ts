@@ -37,7 +37,7 @@ export async function getAccountsForUser(
 
   const { data, error } = await admin
     .from("accounts")
-    .select("id, name, balance, connection_id")
+    .select("id, name, balance, connection_id, type")
     .eq("user_id", uid)
     .order("name");
 
@@ -98,15 +98,18 @@ export async function getTransactionsForUser(
 
   const { data, error } = await admin
     .from("transactions")
-    .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total")
+    .select(
+      "id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total, import_source, import_batch_id, import_order, created_at, card_line_kind"
+    )
     .eq("user_id", uid)
-    .order("date", { ascending: orderAsc });
+    .order("date", { ascending: orderAsc })
+    .order("created_at", { ascending: orderAsc });
 
   if (error) {
     console.error("[getTransactionsForUser]", error.message);
     throw new Error(`Erro ao buscar transações: ${error.message}`);
   }
 
-  const all = (data ?? []) as Array<{ id: string; date: string; description: string; amount: number; type: string; category: string | null; subcategoria: string | null; account_id: string; parcela_numero: number | null; parcela_total: number | null }>;
+  const all = (data ?? []) as Array<{ id: string; date: string; description: string; amount: number; type: string; category: string | null; subcategoria: string | null; account_id: string; parcela_numero: number | null; parcela_total: number | null; import_source: string | null; import_batch_id: string | null; import_order: number | null; created_at: string | null; card_line_kind: string | null }>;
   return options?.limit ? all.slice(0, options.limit) : all;
 }

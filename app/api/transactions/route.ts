@@ -17,11 +17,24 @@ export async function GET(request: Request) {
     const from = searchParams.get("from"); // YYYY-MM-DD
     const to = searchParams.get("to"); // YYYY-MM-DD
     const accountId = searchParams.get("account_id"); // opcional: filtrar por conta
+    const importSource = searchParams.get("import_source"); // opcional: pdf/manual/pdf_cartao
+    const importBatchId = searchParams.get("import_batch_id"); // opcional: lote da importação
+    const cardOnly = searchParams.get("card_only") === "1" || searchParams.get("card_only") === "true";
+
+    let creditAccountIds: string[] | null = null;
+    if (cardOnly) {
+      const { data: creditAccts } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("type", "credit");
+      creditAccountIds = (creditAccts ?? []).map((a) => a.id);
+    }
 
     let query = supabase
       .from("transactions")
-      .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total")
-      .order("date", { ascending: false });
+      .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total, import_source, import_batch_id, import_order, created_at, card_line_kind")
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false });
 
     if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
       query = query.gte("date", from);
@@ -31,6 +44,20 @@ export async function GET(request: Request) {
     }
     if (accountId && accountId.trim()) {
       query = query.eq("account_id", accountId.trim());
+    } else if (cardOnly) {
+      if (!creditAccountIds?.length) {
+        return NextResponse.json([]);
+      }
+      query = query.in("account_id", creditAccountIds);
+    }
+    if (
+      importSource &&
+      (importSource === "pdf" || importSource === "manual" || importSource === "pdf_cartao")
+    ) {
+      query = query.eq("import_source", importSource);
+    }
+    if (importBatchId && importBatchId.trim()) {
+      query = query.eq("import_batch_id", importBatchId.trim());
     }
 
     const { data, error } = await query;
@@ -92,6 +119,7 @@ export async function POST(request: Request) {
       type,
       category,
       subcategoria: subcategoria ?? null,
+      import_source: "manual",
     };
     if (parcelaNumero != null) insertRow.parcela_numero = parcelaNumero;
     if (parcelaTotal != null) insertRow.parcela_total = parcelaTotal;
@@ -99,7 +127,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("transactions")
       .insert(insertRow)
-      .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total")
+      .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total, import_source, import_batch_id, import_order, created_at, card_line_kind")
       .single();
 
     if (error) {

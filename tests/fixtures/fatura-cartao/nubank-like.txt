@@ -1,0 +1,9 @@
+Fatura do cartao
+Vencimento em 15/04/2026
+Detalhamento da fatura
+01/03 NETFLIX.COM SAO PAULO 39,90
+03/03 IFOOD*PEDIDO 82,35
+05/03 PAGAMENTO EM CONTA -1.200,00
+18/03 AMAZON BR PARC 02/06 119,00
+Valor total 2.145,78
+

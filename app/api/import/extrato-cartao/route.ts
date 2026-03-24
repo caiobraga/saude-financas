@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { parsePdfExtrato, type TransacaoExtrato } from "@/lib/parse-pdf-extrato";
+import { parsePdfFaturaCartao, type TransacaoFaturaCartao } from "@/lib/parse-pdf-fatura-cartao";
 import { getSubcategoria } from "@/lib/categorias";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-/**
- * Mesma lógica de identificação do Debug (PDF em tabela): parsePdfExtrato usa
- * parseExtratoTextoComFallback (juntar linhas, expandir blob, C/D, continuação após valor).
- */
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -26,13 +22,13 @@ export async function POST(request: Request) {
 
     if (!file || file.type !== "application/pdf") {
       return NextResponse.json(
-        { error: "Envie um arquivo PDF de extrato." },
+        { error: "Envie um arquivo PDF da fatura do cartão." },
         { status: 400 }
       );
     }
 
     const buffer = new Uint8Array(await file.arrayBuffer());
-    const { texto, transacoes, csv } = await parsePdfExtrato(buffer);
+    const { texto, transacoes, csv } = await parsePdfFaturaCartao(buffer);
 
     if (!texto.trim()) {
       return NextResponse.json(
@@ -43,7 +39,7 @@ export async function POST(request: Request) {
 
     if (transacoes.length === 0) {
       return NextResponse.json(
-        { error: "Nenhuma transação encontrada no PDF. O formato do extrato pode não ser suportado." },
+        { error: "Nenhuma linha reconhecida na fatura. O formato pode não ser suportado." },
         { status: 400 }
       );
     }
@@ -52,7 +48,16 @@ export async function POST(request: Request) {
       return NextResponse.json({
         preview: true,
         count: transacoes.length,
-        transacoes,
+        transacoes: transacoes.map((t) => ({
+          date: t.date,
+          description: t.description,
+          amount: t.amount,
+          type: t.type,
+          category: t.category ?? null,
+          card_line_kind: t.cardLineKind,
+          parcela_numero: t.parcela_numero ?? null,
+          parcela_total: t.parcela_total ?? null,
+        })),
         csv,
       });
     }
@@ -60,29 +65,36 @@ export async function POST(request: Request) {
     const accountId = formData.get("account_id") ?? formData.get("accountId");
     if (!accountId || typeof accountId !== "string" || !accountId.trim()) {
       return NextResponse.json(
-        { error: "Selecione a conta de destino para importar as transações." },
+        { error: "Selecione o cartão (conta tipo crédito) de destino." },
         { status: 400 }
       );
     }
 
     const { data: account, error: accError } = await supabase
       .from("accounts")
-      .select("id")
+      .select("id, type")
       .eq("id", accountId.trim())
       .single();
 
     if (accError || !account?.id) {
       return NextResponse.json(
-        { error: "Conta não encontrada ou sem permissão. Crie uma conta em Contas e selecione-a." },
+        { error: "Conta não encontrada ou sem permissão." },
         { status: 400 }
       );
     }
 
-    const importBatchId = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    if (account.type !== "credit") {
+      return NextResponse.json(
+        { error: "A importação de fatura só pode ser feita em uma conta do tipo Cartão de crédito. Crie ou selecione uma conta \"Crédito\" em Contas." },
+        { status: 400 }
+      );
+    }
 
-    const rows = transacoes.map((t: TransacaoExtrato, idx: number) => ({
+    const importBatchId = `pdf-cartao-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    const rows = transacoes.map((t: TransacaoFaturaCartao, idx: number) => ({
       account_id: account.id,
-      external_id: `pdf-${t.date}-${t.description.slice(0, 30)}-${t.amount}-${Math.random().toString(36).slice(2, 9)}`,
+      external_id: `pdf-cartao-${t.date}-${t.description.slice(0, 24)}-${t.amount}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
       date: t.date,
       description: t.description,
       raw_description: t.description,
@@ -92,9 +104,10 @@ export async function POST(request: Request) {
       subcategoria: getSubcategoria(t.category ?? null),
       parcela_numero: t.parcela_numero ?? null,
       parcela_total: t.parcela_total ?? null,
-      import_source: "pdf",
+      import_source: "pdf_cartao",
       import_batch_id: importBatchId,
       import_order: idx + 1,
+      card_line_kind: t.cardLineKind,
     }));
 
     const { error: txError } = await supabase.from("transactions").insert(rows);
@@ -113,10 +126,10 @@ export async function POST(request: Request) {
       importBatchId,
     });
   } catch (err) {
-    console.error("Import extrato PDF error:", err);
+    console.error("Import fatura cartão error:", err);
     return NextResponse.json(
       {
-        error: err instanceof Error ? err.message : "Erro ao importar extrato",
+        error: err instanceof Error ? err.message : "Erro ao importar fatura",
       },
       { status: 500 }
     );

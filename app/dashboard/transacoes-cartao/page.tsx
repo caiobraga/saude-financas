@@ -4,11 +4,30 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
 import { getViewAsFromCookies } from "@/lib/view-as";
 import { getAccountsForUser, getTransactionsForUser } from "@/lib/dashboard-for-user";
-import { TransacoesTable } from "./TransacoesTable";
+import { TransacoesTable } from "../transacoes/TransacoesTable";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-export default async function TransacoesPage() {
+type Tx = {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  type: string;
+  category: string | null;
+  subcategoria: string | null;
+  account_id: string | null;
+  parcela_numero: number | null;
+  parcela_total: number | null;
+  import_source: string | null;
+  import_batch_id: string | null;
+  import_order: number | null;
+  created_at: string | null;
+  card_line_kind: string | null;
+};
+
+export default async function TransacoesCartaoPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -17,7 +36,7 @@ export default async function TransacoesPage() {
   const cookieStore = await cookies();
   const viewAs = getViewAsFromCookies(cookieStore, isAdmin ?? false);
 
-  let transactions: Array<{ id: string; date: string; description: string; amount: number; type: string; category: string | null; subcategoria: string | null; account_id: string | null; parcela_numero: number | null; parcela_total: number | null; import_source: string | null; import_batch_id: string | null; import_order: number | null; created_at: string | null; card_line_kind: string | null }> = [];
+  let transactions: Tx[] = [];
   let accounts: Array<{ id: string; name: string }> = [];
   let viewAsError: string | null = null;
 
@@ -29,14 +48,14 @@ export default async function TransacoesPage() {
         getAccountsForUser(admin, uid),
         getTransactionsForUser(admin, uid, { order: "desc" }),
       ]);
-      const bankAccountIds = new Set(
-        accountsForUser.filter((a) => a.type === "checking" || a.type === "savings").map((a) => a.id)
+      const creditIds = new Set(
+        accountsForUser.filter((a) => a.type === "credit").map((a) => a.id)
       );
       accounts = accountsForUser
-        .filter((a) => a.type === "checking" || a.type === "savings")
+        .filter((a) => a.type === "credit")
         .map((a) => ({ id: a.id, name: a.name }));
       transactions = transactionsForUser
-        .filter((t) => t.account_id != null && bankAccountIds.has(t.account_id))
+        .filter((t) => t.account_id && creditIds.has(t.account_id))
         .map((t) => ({
           id: t.id,
           date: typeof t.date === "string" ? t.date : String(t.date),
@@ -56,28 +75,26 @@ export default async function TransacoesPage() {
         }));
     } catch (err) {
       viewAsError = err instanceof Error ? err.message : "Erro ao carregar dados do usuário";
-      console.error("[TransacoesPage viewAs]", err);
+      console.error("[TransacoesCartaoPage viewAs]", err);
     }
   } else {
-    const { data: bankAccounts } = await supabase
+    const { data: creditAccounts } = await supabase
       .from("accounts")
       .select("id, name")
-      .in("type", ["checking", "savings"])
+      .eq("type", "credit")
       .order("name");
-    accounts = bankAccounts ?? [];
-    const bankIds = accounts.map((a) => a.id);
-    if (bankIds.length === 0) {
-      transactions = [];
-    } else {
-      const { data: transactionsData } = await supabase
+    accounts = creditAccounts ?? [];
+    const ids = accounts.map((a) => a.id);
+    if (ids.length > 0) {
+      const { data: txData } = await supabase
         .from("transactions")
         .select(
           "id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total, import_source, import_batch_id, import_order, created_at, card_line_kind"
         )
-        .in("account_id", bankIds)
+        .in("account_id", ids)
         .order("date", { ascending: false })
         .order("created_at", { ascending: false });
-      transactions = (transactionsData ?? []).map((t) => ({
+      transactions = (txData ?? []).map((t) => ({
         id: t.id,
         date: typeof t.date === "string" ? t.date : String(t.date),
         description: t.description,
@@ -100,31 +117,33 @@ export default async function TransacoesPage() {
   return (
     <div className="p-4 sm:p-6 md:p-8">
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-white">
-        Transações
+        Transações do cartão
       </h1>
       <p className="mt-1 text-zinc-500 dark:text-zinc-400">
-        {viewAs
-          ? "Transações deste usuário (somente leitura no modo visualização)."
-          : "Movimentações de contas corrente e poupança (cartão de crédito fica em Transações cartão)."}
+        Movimentações das contas tipo <strong>Cartão de crédito</strong>. Importe a fatura em PDF em{" "}
+        <Link href="/dashboard/importar-fatura-cartao" className="font-medium text-emerald-600 hover:underline dark:text-emerald-400">
+          Importar fatura cartão
+        </Link>
+        .
       </p>
 
       {viewAsError && (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
-          Não foi possível carregar as transações: {viewAsError}. Verifique se SUPABASE_SERVICE_ROLE_KEY está definida.
+          Não foi possível carregar: {viewAsError}.
         </div>
       )}
 
-      {viewAs && !viewAsError && transactions.length === 0 && accounts.length === 0 && (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
-          Este usuário ainda não tem contas nem transações. Os dados aparecerão aqui após importar um extrato PDF.
+      {!viewAs && accounts.length === 0 && (
+        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+          Crie uma conta do tipo <strong>Crédito</strong> em{" "}
+          <Link href="/dashboard/contas" className="font-medium underline">
+            Contas
+          </Link>{" "}
+          (ex.: nome do cartão). Depois importe a fatura em PDF.
         </div>
       )}
 
-      <TransacoesTable
-        transactions={transactions ?? []}
-        accounts={accounts ?? []}
-        context="bank"
-      />
+      <TransacoesTable transactions={transactions} accounts={accounts} context="credit" />
     </div>
   );
 }

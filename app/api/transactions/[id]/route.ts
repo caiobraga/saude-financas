@@ -41,7 +41,7 @@ export async function PATCH(
       .from("transactions")
       .update(updates)
       .eq("id", id)
-      .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total")
+      .select("id, date, description, amount, type, category, subcategoria, account_id, parcela_numero, parcela_total, import_source, import_batch_id, import_order, created_at, card_line_kind")
       .single();
 
     if (error) {

@@ -33,6 +33,8 @@ type Transaction = {
   subcategoria?: string | null;
   parcela_numero?: number | null;
   parcela_total?: number | null;
+  import_source?: string | null;
+  card_line_kind?: string | null;
 };
 
 const PROLABORE_CATEGORY_REGEX = /s[oó]cio|pr[oó]-?labore|prolabore|retirada/i;
@@ -87,6 +89,7 @@ function PlanilhasContent() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
   const [accountFilter, setAccountFilter] = useState("");
+  const [excludeCardResumoFromTotals, setExcludeCardResumoFromTotals] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,8 +130,16 @@ function PlanilhasContent() {
     fetchData();
   }, [fetchData]);
 
-  const receitas = transactions.filter((t) => t.type === "credit");
-  const debits = transactions.filter((t) => t.type === "debit");
+  const isCardResumoLineExcluded = (t: Transaction) =>
+    excludeCardResumoFromTotals &&
+    t.import_source === "pdf_cartao" &&
+    t.card_line_kind === "resumo";
+
+  const transactionsForTotals = transactions.filter((t) => !isCardResumoLineExcluded(t));
+  const cardFaturaLines = transactions.filter((t) => t.import_source === "pdf_cartao");
+
+  const receitas = transactionsForTotals.filter((t) => t.type === "credit");
+  const debits = transactionsForTotals.filter((t) => t.type === "debit");
   const prolabore = debits.filter(isProLabore);
   const despesasOutras = debits.filter((t) => !isProLabore(t));
 
@@ -257,8 +268,8 @@ function PlanilhasContent() {
     type CasaRow = { type: "sub"; name: string } | { type: "cat"; categoria: string; total: number };
     const HEADER_GREEN_XLS = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF93C47D" } };
     const colWidths = [
-      { width: 22 }, { width: 10 }, { width: 12 }, { width: 4 }, { width: 4 },
-      { width: 20 }, { width: 14 }, { width: 12 }, { width: 24 }, { width: 20 }, { width: 12 },
+      { width: 22 }, { width: 24 }, { width: 12 }, { width: 14 }, { width: 14 },
+      { width: 36 }, { width: 14 }, { width: 12 }, { width: 24 }, { width: 20 }, { width: 12 },
     ];
 
     function buildCasaRowsForMonth(monthTransactions: Transaction[]): CasaRow[] {
@@ -306,17 +317,20 @@ function PlanilhasContent() {
       const lastDay = new Date(year, month, 0).getDate();
       const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
       const inMonth = (t: Transaction) => t.date >= monthStart && t.date <= monthEnd;
-      const txMonth = transactions.filter(inMonth);
+      const txMonth = transactionsForTotals.filter(inMonth);
       const receitasMonth = txMonth.filter((t) => t.type === "credit");
       const debitsMonth = txMonth.filter((t) => t.type === "debit");
-      const prolaboreMonth = debitsMonth.filter(isProLabore);
+      const cardMonth = txMonth.filter((t) => t.import_source === "pdf_cartao");
       const despesasOutrasMonth = debitsMonth.filter((t) => !isProLabore(t));
-      const totalReceitasMonth = receitasMonth.reduce((s, t) => s + Number(t.amount), 0);
-      const totalDespesasMonth = prolaboreMonth.reduce((s, t) => s + Math.abs(Number(t.amount)), 0)
-        + despesasOutrasMonth.reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
-      const resultadoMonth = totalReceitasMonth - totalDespesasMonth;
 
       const casaRowsMonth = buildCasaRowsForMonth(txMonth);
+      const despesasDetalhadasMonth = [...despesasOutrasMonth]
+        .map((t) => ({
+          ...t,
+          subcategoria: t.subcategoria ?? getSubcategoria(t.category),
+          categoria: (t.category && t.category.trim()) || "Outras despesas",
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
       const receitasOrdenadasMonth = [...receitasMonth].sort((a, b) => a.date.localeCompare(b.date));
 
       // Nome da aba: MM/AA (Excel não aceita /, usamos -)
@@ -325,27 +339,51 @@ function PlanilhasContent() {
       ws.columns = colWidths;
 
       let row = 1;
-      ws.mergeCells(row, 6, row, 7);
+      ws.mergeCells(row, 1, row, 3);
+      ws.getCell(row, 1).value = "DESPESAS (DETALHE)";
+      ws.getCell(row, 1).fill = HEADER_GREEN_XLS;
+      ws.mergeCells(row, 6, row, 8);
       ws.getCell(row, 6).value = "RECEITA";
       ws.getCell(row, 6).fill = HEADER_GREEN_XLS;
       ws.mergeCells(row, 9, row, 10);
-      ws.getCell(row, 9).value = "DESPESA";
+      ws.getCell(row, 9).value = "DESPESA (RESUMO)";
       ws.getCell(row, 9).fill = HEADER_GREEN_XLS;
       row++;
 
-      const maxDataRows = Math.max(casaRowsMonth.length, receitasOrdenadasMonth.length, 1);
+      ws.getCell(row, 1).value = "Subcategoria";
+      ws.getCell(row, 2).value = "Descricao";
+      ws.getCell(row, 3).value = "Valor";
+      ws.getCell(row, 6).value = "Descricao";
+      ws.getCell(row, 7).value = "Valor";
+      ws.getCell(row, 8).value = "Parcela";
+      for (let c = 6; c <= 8; c++) {
+        ws.getCell(row, c).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE0E0E0" },
+        };
+        ws.getCell(row, c).font = { bold: true };
+      }
+      for (let c = 1; c <= 3; c++) {
+        ws.getCell(row, c).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFE0E0E0" },
+        };
+        ws.getCell(row, c).font = { bold: true };
+      }
+      row++;
+
+      const despesasStartRow = row;
+      const receitasStartRow = row;
+      const maxDataRows = Math.max(despesasDetalhadasMonth.length, receitasOrdenadasMonth.length, 1);
       for (let i = 0; i < maxDataRows; i++) {
-        if (i < casaRowsMonth.length) {
-          const item = casaRowsMonth[i];
-          if (item.type === "sub") {
-            ws.mergeCells(row, 1, row, 3);
-            ws.getCell(row, 1).value = item.name;
-            ws.getCell(row, 1).fill = HEADER_GREEN_XLS;
-          } else {
-            ws.getCell(row, 1).value = item.categoria;
-            ws.getCell(row, 3).value = item.total;
-            ws.getCell(row, 3).numFmt = '"R$"#,##0.00';
-          }
+        if (i < despesasDetalhadasMonth.length) {
+          const t = despesasDetalhadasMonth[i];
+          ws.getCell(row, 1).value = t.subcategoria;
+          ws.getCell(row, 2).value = t.description;
+          ws.getCell(row, 3).value = Math.abs(Number(t.amount));
+          ws.getCell(row, 3).numFmt = '"R$"#,##0.00';
         }
         if (i < receitasOrdenadasMonth.length) {
           const t = receitasOrdenadasMonth[i];
@@ -357,29 +395,116 @@ function PlanilhasContent() {
               ? `${t.parcela_numero}/${t.parcela_total}`
               : "";
         }
-        if (i < casaRowsMonth.length) {
-          const item = casaRowsMonth[i];
-          if (item.type === "sub") {
-            ws.mergeCells(row, 9, row, 10);
-            ws.getCell(row, 9).value = item.name;
-            ws.getCell(row, 9).fill = HEADER_GREEN_XLS;
+        row++;
+      }
+      const despesasEndRow = Math.max(despesasStartRow, row - 1);
+      const receitasEndRow = Math.max(receitasStartRow, row - 1);
+
+      ws.getCell(row, 6).value = "TOTAL";
+      ws.getCell(row, 6).fill = HEADER_GREEN_XLS;
+      ws.getCell(row, 7).value = receitasOrdenadasMonth.length
+        ? { formula: `SUM(G${receitasStartRow}:G${receitasEndRow})` }
+        : 0;
+      ws.getCell(row, 7).numFmt = '"R$"#,##0.00';
+      ws.getCell(row, 9).value = "TOTAL";
+      ws.getCell(row, 9).fill = HEADER_GREEN_XLS;
+      ws.getCell(row, 10).value = despesasDetalhadasMonth.length
+        ? { formula: `SUM(C${despesasStartRow}:C${despesasEndRow})` }
+        : 0;
+      ws.getCell(row, 10).numFmt = '"R$"#,##0.00';
+      row++;
+
+      ws.getCell(row, 9).value = "RESULTADO";
+      ws.getCell(row, 9).fill = HEADER_GREEN_XLS;
+      ws.getCell(row, 10).value = { formula: `G${row - 1}-J${row - 1}` };
+      ws.getCell(row, 10).numFmt = '"R$"#,##0.00';
+
+      row += 2;
+      ws.mergeCells(row, 9, row, 10);
+      ws.getCell(row, 9).value = "DESPESAS POR SUBCATEGORIA/CATEGORIA";
+      ws.getCell(row, 9).fill = HEADER_GREEN_XLS;
+      row++;
+      ws.getCell(row, 9).value = "Categoria";
+      ws.getCell(row, 10).value = "Valor";
+      row++;
+
+      for (const item of casaRowsMonth) {
+        if (item.type === "sub") {
+          ws.mergeCells(row, 9, row, 10);
+          ws.getCell(row, 9).value = item.name;
+          ws.getCell(row, 9).fill = HEADER_GREEN_XLS;
+        } else {
+          ws.getCell(row, 9).value = item.categoria;
+          if (despesasDetalhadasMonth.length > 0) {
+            const catEsc = item.categoria.replace(/"/g, '""');
+            ws.getCell(row, 10).value = {
+              formula: `SUMIF(B${despesasStartRow}:B${despesasEndRow},"${catEsc}",C${despesasStartRow}:C${despesasEndRow})`,
+            };
           } else {
-            ws.getCell(row, 9).value = item.categoria;
-            ws.getCell(row, 10).value = item.total;
-            ws.getCell(row, 10).numFmt = '"R$"#,##0.00';
+            ws.getCell(row, 10).value = 0;
           }
+          ws.getCell(row, 10).numFmt = '"R$"#,##0.00';
         }
         row++;
       }
 
-      ws.getCell(row, 6).value = "TOTAL";
-      ws.getCell(row, 6).fill = HEADER_GREEN_XLS;
-      ws.getCell(row, 7).value = totalReceitasMonth;
-      ws.getCell(row, 7).numFmt = '"R$"#,##0.00';
-      ws.getCell(row, 9).value = totalDespesasMonth;
-      ws.getCell(row, 9).numFmt = '"R$"#,##0.00';
-      ws.getCell(row, 10).value = resultadoMonth;
-      ws.getCell(row, 10).numFmt = '"R$"#,##0.00';
+      // Lançamentos de fatura de cartão no mesmo mês (sem aba separada)
+      if (cardMonth.length > 0) {
+        row += 2;
+        ws.getCell(row, 1).value = "LANCAMENTOS CARTAO (PDF)";
+        ws.getCell(row, 1).fill = HEADER_GREEN_XLS;
+        row++;
+        ws.getCell(row, 1).value = "Data";
+        ws.getCell(row, 2).value = "Descricao";
+        ws.getCell(row, 3).value = "Tipo linha";
+        ws.getCell(row, 4).value = "Valor";
+        ws.getCell(row, 5).value = "CreditoDebito";
+        ws.getCell(row, 6).value = "Cartao";
+        ws.getCell(row, 7).value = "Parcela";
+        for (let c = 1; c <= 7; c++) {
+          ws.getCell(row, c).fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFE0E0E0" },
+          };
+          ws.getCell(row, c).font = { bold: true };
+        }
+        row++;
+
+        const sortedCard = [...cardMonth].sort((a, b) => {
+          const ao = a.import_order ?? Number.MAX_SAFE_INTEGER;
+          const bo = b.import_order ?? Number.MAX_SAFE_INTEGER;
+          if (ao !== bo) return ao - bo;
+          return a.date.localeCompare(b.date);
+        });
+
+        for (const t of sortedCard) {
+          const kind =
+            t.card_line_kind === "compra"
+              ? "Compra"
+              : t.card_line_kind === "resumo"
+                ? "Resumo/total"
+                : t.card_line_kind === "pagamento"
+                  ? "Pagamento"
+                  : t.card_line_kind === "encargo"
+                    ? "Encargo/taxa"
+                    : t.card_line_kind === "outro"
+                      ? "Outro"
+                      : "";
+          ws.getCell(row, 1).value = t.date;
+          ws.getCell(row, 2).value = t.description;
+          ws.getCell(row, 3).value = kind;
+          ws.getCell(row, 4).value = Number(t.amount);
+          ws.getCell(row, 4).numFmt = '"R$"#,##0.00';
+          ws.getCell(row, 5).value = t.type === "credit" ? "Credito" : "Debito";
+          ws.getCell(row, 6).value = "Sim";
+          ws.getCell(row, 7).value =
+            t.parcela_numero != null && t.parcela_total != null
+              ? `${t.parcela_numero}/${t.parcela_total}`
+              : "";
+          row++;
+        }
+      }
     }
 
     const buf = await wb.xlsx.writeBuffer();
@@ -414,6 +539,17 @@ function PlanilhasContent() {
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
         </select>
+        <label className="flex max-w-sm cursor-pointer items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+          <input
+            type="checkbox"
+            checked={excludeCardResumoFromTotals}
+            onChange={(e) => setExcludeCardResumoFromTotals(e.target.checked)}
+            className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-800"
+          />
+          <span>
+            Excluir linhas <strong>Resumo</strong> do cartão (tipo &quot;Resumo / total&quot;, ex.: limite) dos totais acima — se existirem, continuam na tabela abaixo
+          </span>
+        </label>
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Período:</span>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -689,6 +825,57 @@ function PlanilhasContent() {
               </div>
             )}
           </section>
+
+          {/* Detalhe fatura cartão (importação PDF) */}
+          {cardFaturaLines.length > 0 && (
+            <section className="rounded-xl border border-violet-200 bg-violet-50/60 p-6 dark:border-violet-900/50 dark:bg-violet-950/30">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+                💳 Fatura do cartão (PDF) — lançamentos importados
+              </h2>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                Compras, pagamentos e encargos. Saldo anterior, subtotal e total da fatura (BB) <strong>não</strong> são importados para não duplicar totais.
+              </p>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[480px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-violet-200 dark:border-violet-800">
+                      <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Data</th>
+                      <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Descrição</th>
+                      <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Tipo linha</th>
+                      <th className="pb-2 text-right font-medium text-zinc-600 dark:text-zinc-400">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...cardFaturaLines]
+                      .sort((a, b) => a.date.localeCompare(b.date))
+                      .map((t) => (
+                        <tr key={t.id} className="border-b border-violet-100 dark:border-violet-900/40">
+                          <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
+                          <td className="py-2 pr-4 text-zinc-800 dark:text-zinc-200">{t.description}</td>
+                          <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
+                            {t.card_line_kind === "compra" && "Compra"}
+                            {t.card_line_kind === "resumo" && "Resumo / total"}
+                            {t.card_line_kind === "pagamento" && "Pagamento"}
+                            {t.card_line_kind === "encargo" && "Encargo / taxa"}
+                            {t.card_line_kind === "outro" && "Outro"}
+                            {!t.card_line_kind && "—"}
+                          </td>
+                          <td
+                            className={`py-2 text-right font-medium tabular-nums ${
+                              t.type === "credit"
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-red-600 dark:text-red-400"
+                            }`}
+                          >
+                            {formatCurrency(Number(t.amount))}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* 4. Resumo gerencial */}
           <section className="rounded-xl border-2 border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-700 dark:bg-zinc-900/80">

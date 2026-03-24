@@ -8,9 +8,11 @@ import { createClient } from "@/lib/supabase/client";
 const nav = [
   { href: "/dashboard", label: "Visão geral" },
   { href: "/dashboard/transacoes", label: "Transações" },
+  { href: "/dashboard/transacoes-cartao", label: "Transações cartão" },
   { href: "/dashboard/planilhas", label: "Planilhas" },
   { href: "/dashboard/contas", label: "Contas" },
   { href: "/dashboard/importar-extrato", label: "Importar extrato PDF" },
+  { href: "/dashboard/importar-fatura-cartao", label: "Importar fatura cartão" },
   { href: "/dashboard/perfil", label: "Perfil" },
 ];
 
@@ -26,7 +28,10 @@ function NavContent({
   return (
     <>
       {nav.map(({ href, label }) => {
-        const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+        const isActive =
+          href === "/dashboard"
+            ? pathname === "/dashboard"
+            : pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
             key={href}

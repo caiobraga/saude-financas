@@ -30,20 +30,43 @@ type Transaction = {
   account_id: string | null;
   parcela_numero?: number | null;
   parcela_total?: number | null;
+  import_source?: string | null;
+  import_batch_id?: string | null;
+  import_order?: number | null;
+  created_at?: string | null;
+  card_line_kind?: string | null;
 };
 
 type Account = { id: string; name: string };
+
+export type TransacoesTableContext = "bank" | "credit";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function shouldSortByImportOrder(
+  importBatchFilter: string,
+  importSourceFilter: string,
+  filtered: Transaction[]
+): boolean {
+  if (importBatchFilter.trim()) return true;
+  if (importSourceFilter !== "pdf" && importSourceFilter !== "pdf_cartao") return false;
+  const batchIds = new Set(
+    filtered.map((t) => t.import_batch_id).filter((id): id is string => Boolean(id))
+  );
+  return batchIds.size === 1;
+}
+
 export function TransacoesTable({
   transactions: initial,
   accounts,
+  context = "bank",
 }: {
   transactions: Transaction[];
   accounts: Account[];
+  /** bank = corrente/poupança; credit = só cartão (filtros de PDF fatura só aqui) */
+  context?: TransacoesTableContext;
 }) {
   const router = useRouter();
   const [transactions, setTransactions] = useState(initial);
@@ -69,12 +92,37 @@ export function TransacoesTable({
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [importSourceFilter, setImportSourceFilter] = useState("");
+  const [importBatchFilter, setImportBatchFilter] = useState("");
+  const [cardLineKindFilter, setCardLineKindFilter] = useState("");
 
   const categories = Array.from(
     new Set(transactions.map((t) => t.category ?? "").filter(Boolean))
   ).sort((a, b) => a.localeCompare(b));
 
-  const filteredTransactions = transactions.filter((t) => {
+  const pdfBatchMeta = new Map<string, { count: number; firstCreatedAt: string | null }>();
+  for (const t of transactions) {
+    if (!t.import_batch_id) continue;
+    if (context === "bank" && t.import_source !== "pdf") continue;
+    if (context === "credit" && t.import_source !== "pdf_cartao") continue;
+    const prev = pdfBatchMeta.get(t.import_batch_id);
+    if (!prev) {
+      pdfBatchMeta.set(t.import_batch_id, {
+        count: 1,
+        firstCreatedAt: t.created_at ?? null,
+      });
+    } else {
+      prev.count += 1;
+      if (t.created_at && (!prev.firstCreatedAt || t.created_at < prev.firstCreatedAt)) {
+        prev.firstCreatedAt = t.created_at;
+      }
+    }
+  }
+  const pdfBatchOptions = Array.from(pdfBatchMeta.entries())
+    .map(([id, meta]) => ({ id, ...meta }))
+    .sort((a, b) => (b.firstCreatedAt ?? "").localeCompare(a.firstCreatedAt ?? ""));
+
+  let filteredTransactions = transactions.filter((t) => {
     const matchSearch =
       !searchQuery.trim() ||
       t.description.toLowerCase().includes(searchQuery.trim().toLowerCase());
@@ -82,8 +130,33 @@ export function TransacoesTable({
       !categoryFilter || (t.category ?? "") === categoryFilter;
     const matchAccount =
       !accountFilter || (t.account_id ?? "") === accountFilter;
-    return matchSearch && matchCategory && matchAccount;
+    const matchImportSource =
+      !importSourceFilter || (t.import_source ?? "") === importSourceFilter;
+    const matchImportBatch =
+      !importBatchFilter || (t.import_batch_id ?? "") === importBatchFilter;
+    const matchCardLine =
+      !cardLineKindFilter || (t.card_line_kind ?? "") === cardLineKindFilter;
+    return (
+      matchSearch &&
+      matchCategory &&
+      matchAccount &&
+      matchImportSource &&
+      matchImportBatch &&
+      matchCardLine
+    );
   });
+
+  if (shouldSortByImportOrder(importBatchFilter, importSourceFilter, filteredTransactions)) {
+    filteredTransactions = [...filteredTransactions].sort((a, b) => {
+      const ao = a.import_order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b.import_order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      const ca = a.created_at ?? "";
+      const cb = b.created_at ?? "";
+      if (ca !== cb) return ca.localeCompare(cb);
+      return a.id.localeCompare(b.id);
+    });
+  }
 
   function getAccountName(accountId: string | null): string {
     if (!accountId) return "—";
@@ -96,6 +169,17 @@ export function TransacoesTable({
   const isAllSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
 
   const showParcelaColumn = transactions.some((t) => t.parcela_numero != null && t.parcela_total != null);
+  const showCardLineColumn =
+    context === "credit" &&
+    transactions.some((t) => t.card_line_kind != null && t.card_line_kind !== "");
+
+  const CARD_LINE_LABELS: Record<string, string> = {
+    compra: "Compra",
+    resumo: "Resumo / total",
+    pagamento: "Pagamento",
+    encargo: "Encargo / taxa",
+    outro: "Outro",
+  };
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -123,6 +207,7 @@ export function TransacoesTable({
       account_id: t.account_id ?? undefined,
       parcela_numero: t.parcela_numero ?? undefined,
       parcela_total: t.parcela_total ?? undefined,
+      card_line_kind: t.card_line_kind ?? undefined,
     });
     setError(null);
   }
@@ -150,7 +235,20 @@ export function TransacoesTable({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao salvar");
       setTransactions((prev) =>
-        prev.map((t) => (t.id === editingId ? { ...t, ...data, category: data.category ?? null, subcategoria: data.subcategoria ?? null, account_id: data.account_id ?? null, parcela_numero: data.parcela_numero ?? null, parcela_total: data.parcela_total ?? null } : t))
+        prev.map((t) =>
+          t.id === editingId
+            ? {
+                ...t,
+                ...data,
+                category: data.category ?? null,
+                subcategoria: data.subcategoria ?? null,
+                account_id: data.account_id ?? null,
+                parcela_numero: data.parcela_numero ?? null,
+                parcela_total: data.parcela_total ?? null,
+                card_line_kind: data.card_line_kind ?? t.card_line_kind ?? null,
+              }
+            : t
+        )
       );
       cancelEdit();
       router.refresh();
@@ -317,13 +415,81 @@ export function TransacoesTable({
               </option>
             ))}
           </select>
-          {(searchQuery.trim() || categoryFilter || accountFilter) && (
+          <select
+            value={importSourceFilter}
+            onChange={(e) => {
+              const v = e.target.value;
+              setImportSourceFilter(v);
+              if (
+                (context === "bank" && v !== "pdf") ||
+                (context === "credit" && v !== "pdf_cartao")
+              ) {
+                setImportBatchFilter("");
+              }
+            }}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+          >
+            <option value="">Todas as origens</option>
+            {context === "bank" && (
+              <option value="pdf">Extrato conta (PDF)</option>
+            )}
+            {context === "credit" && (
+              <option value="pdf_cartao">Fatura cartão (PDF)</option>
+            )}
+            <option value="manual">Manuais</option>
+          </select>
+          <select
+            value={importBatchFilter}
+            onChange={(e) => {
+              const v = e.target.value;
+              setImportBatchFilter(v);
+              if (v) {
+                setImportSourceFilter(context === "credit" ? "pdf_cartao" : "pdf");
+              }
+            }}
+            disabled={pdfBatchOptions.length === 0}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+          >
+            <option value="">
+              {context === "credit" ? "Todas as faturas (PDF)" : "Todos os lotes (PDF extrato)"}
+            </option>
+            {pdfBatchOptions.map((batch) => (
+              <option key={batch.id} value={batch.id}>
+                {context === "credit"
+                  ? `Fatura ${batch.id.slice(-8)} (${batch.count} trans.)`
+                  : `Lote extrato ${batch.id.slice(-8)} (${batch.count} trans.)`}
+              </option>
+            ))}
+          </select>
+          {showCardLineColumn && (
+            <select
+              value={cardLineKindFilter}
+              onChange={(e) => setCardLineKindFilter(e.target.value)}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+            >
+              <option value="">Todas as linhas (fatura)</option>
+              <option value="compra">Compra</option>
+              <option value="resumo">Resumo / total</option>
+              <option value="pagamento">Pagamento</option>
+              <option value="encargo">Encargo / taxa</option>
+              <option value="outro">Outro</option>
+            </select>
+          )}
+          {(searchQuery.trim() ||
+            categoryFilter ||
+            accountFilter ||
+            importSourceFilter ||
+            importBatchFilter ||
+            cardLineKindFilter) && (
             <button
               type="button"
               onClick={() => {
                 setSearchQuery("");
                 setCategoryFilter("");
                 setAccountFilter("");
+                setImportSourceFilter("");
+                setImportBatchFilter("");
+                setCardLineKindFilter("");
               }}
               className="text-sm text-zinc-600 hover:underline dark:text-zinc-400"
             >
@@ -432,6 +598,11 @@ export function TransacoesTable({
               <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
                 Subcategoria
               </th>
+              {showCardLineColumn && (
+                <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+                  Linha fatura
+                </th>
+              )}
               {showParcelaColumn && (
                 <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
                   Parcela
@@ -519,6 +690,13 @@ export function TransacoesTable({
                         ))}
                       </select>
                     </td>
+                    {showCardLineColumn && (
+                      <td className="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        {editForm.card_line_kind
+                          ? CARD_LINE_LABELS[editForm.card_line_kind] ?? editForm.card_line_kind
+                          : "—"}
+                      </td>
+                    )}
                     {showParcelaColumn && (
                       <td className="px-4 py-2">
                         <div className="flex items-center gap-1">
@@ -635,6 +813,13 @@ export function TransacoesTable({
                     <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
                       {t.subcategoria ?? getSubcategoria(t.category)}
                     </td>
+                    {showCardLineColumn && (
+                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                        {t.card_line_kind
+                          ? CARD_LINE_LABELS[t.card_line_kind] ?? t.card_line_kind
+                          : "—"}
+                      </td>
+                    )}
                     {showParcelaColumn && (
                       <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
                         {t.parcela_numero != null && t.parcela_total != null ? (
