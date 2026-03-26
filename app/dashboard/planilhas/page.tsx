@@ -527,11 +527,11 @@ function PlanilhasContent() {
       </p>
 
       {/* Barra de período e filtro por conta */}
-      <div className="sticky top-14 z-20 -mx-4 mt-6 flex flex-wrap items-center gap-4 overflow-visible bg-zinc-100 px-4 py-3 dark:bg-zinc-950 md:static md:z-auto md:mx-0 md:bg-transparent md:py-0 md:dark:bg-transparent">
+      <div className="sticky top-14 z-20 -mx-4 mt-6 flex flex-col items-stretch gap-3 overflow-visible bg-zinc-100 px-4 py-3 dark:bg-zinc-950 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 md:static md:z-auto md:mx-0 md:bg-transparent md:py-0 md:dark:bg-transparent">
         <select
           value={accountFilter}
           onChange={(e) => setAccountFilter(e.target.value)}
-          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-white sm:w-auto"
           aria-label="Conta"
         >
           <option value="">Todas as contas</option>
@@ -623,7 +623,7 @@ function PlanilhasContent() {
         <span className="text-sm text-zinc-500 dark:text-zinc-400">
           {periodoLabel}
         </span>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           {TAB_LABELS.map(({ id, label }) => (
             <button
               key={id}
@@ -671,14 +671,14 @@ function PlanilhasContent() {
               <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Nenhuma receita no período.</p>
             ) : (
               <>
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[320px] border-collapse text-sm">
+                <div className="mt-4 overflow-x-hidden sm:overflow-x-auto">
+                  <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
                     <thead>
                       <tr className="border-b border-zinc-200 dark:border-zinc-700">
-                        <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Data</th>
-                        <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Descrição</th>
+                        <th className="pb-2 pr-2 sm:pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Data</th>
+                        <th className="pb-2 pr-2 sm:pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Descrição</th>
                         {hasParcelaAlguma(receitas) && (
-                          <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Parcela</th>
+                          <th className="hidden pb-2 pr-2 sm:table-cell sm:pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Parcela</th>
                         )}
                         <th className="pb-2 text-right font-medium text-zinc-600 dark:text-zinc-400">Valor</th>
                       </tr>
@@ -688,10 +688,10 @@ function PlanilhasContent() {
                         .sort((a, b) => a.date.localeCompare(b.date))
                         .map((t) => (
                           <tr key={t.id} className="border-b border-zinc-100 dark:border-zinc-800">
-                            <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
-                            <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{t.description}</td>
+                            <td className="py-2 pr-2 sm:pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
+                            <td className="py-2 pr-2 sm:pr-4 text-zinc-700 dark:text-zinc-300">{t.description}</td>
                             {hasParcelaAlguma(receitas) && (
-                              <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
+                              <td className="hidden py-2 pr-2 sm:table-cell sm:pr-4 text-zinc-600 dark:text-zinc-400">
                                 {t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "—"}
                               </td>
                             )}
@@ -716,14 +716,14 @@ function PlanilhasContent() {
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
                 2️⃣ Transferências para sócio / pró-labore
               </h2>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[320px] border-collapse text-sm">
+              <div className="mt-4 overflow-x-hidden sm:overflow-x-auto">
+                <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="border-b border-zinc-200 dark:border-zinc-700">
-                      <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Data</th>
-                      <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Descrição</th>
+                      <th className="pb-2 pr-2 sm:pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Data</th>
+                      <th className="pb-2 pr-2 sm:pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Descrição</th>
                       {hasParcelaAlguma(prolabore) && (
-                        <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Parcela</th>
+                        <th className="hidden pb-2 pr-2 sm:table-cell sm:pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Parcela</th>
                       )}
                       <th className="pb-2 text-right font-medium text-zinc-600 dark:text-zinc-400">Valor</th>
                     </tr>
@@ -733,10 +733,10 @@ function PlanilhasContent() {
                       .sort((a, b) => a.date.localeCompare(b.date))
                       .map((t) => (
                         <tr key={t.id} className="border-b border-zinc-100 dark:border-zinc-800">
-                          <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
-                          <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{t.description}</td>
+                          <td className="py-2 pr-2 sm:pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
+                          <td className="py-2 pr-2 sm:pr-4 text-zinc-700 dark:text-zinc-300">{t.description}</td>
                           {hasParcelaAlguma(prolabore) && (
-                            <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
+                            <td className="hidden py-2 pr-2 sm:table-cell sm:pr-4 text-zinc-600 dark:text-zinc-400">
                               {t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "—"}
                             </td>
                           )}
@@ -780,14 +780,14 @@ function PlanilhasContent() {
                   return (
                     <div key={cat}>
                       <h4 className="text-sm font-medium text-zinc-600 dark:text-zinc-400">{cat}</h4>
-                      <div className="mt-2 overflow-x-auto">
-                        <table className="w-full min-w-[320px] border-collapse text-sm">
+                      <div className="mt-2 overflow-x-hidden sm:overflow-x-auto">
+                        <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
                           <thead>
                             <tr className="border-b border-zinc-200 dark:border-zinc-700">
-                              <th className="pb-2 pr-4 text-left font-medium text-zinc-500 dark:text-zinc-500">Data</th>
-                              <th className="pb-2 pr-4 text-left font-medium text-zinc-500 dark:text-zinc-500">Descrição</th>
+                              <th className="pb-2 pr-2 sm:pr-4 text-left font-medium text-zinc-500 dark:text-zinc-500">Data</th>
+                              <th className="pb-2 pr-2 sm:pr-4 text-left font-medium text-zinc-500 dark:text-zinc-500">Descrição</th>
                               {showParcela && (
-                                <th className="pb-2 pr-4 text-left font-medium text-zinc-500 dark:text-zinc-500">Parcela</th>
+                                <th className="hidden pb-2 pr-2 sm:table-cell sm:pr-4 text-left font-medium text-zinc-500 dark:text-zinc-500">Parcela</th>
                               )}
                               <th className="pb-2 text-right font-medium text-zinc-500 dark:text-zinc-500">Valor</th>
                             </tr>
@@ -797,10 +797,10 @@ function PlanilhasContent() {
                               .sort((a, b) => a.date.localeCompare(b.date))
                               .map((t) => (
                                 <tr key={t.id} className="border-b border-zinc-100 dark:border-zinc-800">
-                                  <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
-                                  <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{t.description}</td>
+                                  <td className="py-2 pr-2 sm:pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
+                                  <td className="py-2 pr-2 sm:pr-4 text-zinc-700 dark:text-zinc-300">{t.description}</td>
                                   {showParcela && (
-                                    <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
+                                    <td className="hidden py-2 pr-2 sm:table-cell sm:pr-4 text-zinc-600 dark:text-zinc-400">
                                       {t.parcela_numero != null && t.parcela_total != null ? `${t.parcela_numero}/${t.parcela_total}` : "—"}
                                     </td>
                                   )}
@@ -835,13 +835,13 @@ function PlanilhasContent() {
               <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                 Compras, pagamentos e encargos. Saldo anterior, subtotal e total da fatura (BB) <strong>não</strong> são importados para não duplicar totais.
               </p>
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[480px] border-collapse text-sm">
+              <div className="mt-4 overflow-x-hidden sm:overflow-x-auto">
+                <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
                   <thead>
                     <tr className="border-b border-violet-200 dark:border-violet-800">
-                      <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Data</th>
-                      <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Descrição</th>
-                      <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Tipo linha</th>
+                      <th className="pb-2 pr-2 sm:pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Data</th>
+                      <th className="pb-2 pr-2 sm:pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Descrição</th>
+                      <th className="pb-2 pr-2 sm:pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Tipo linha</th>
                       <th className="pb-2 text-right font-medium text-zinc-600 dark:text-zinc-400">Valor</th>
                     </tr>
                   </thead>
@@ -850,9 +850,9 @@ function PlanilhasContent() {
                       .sort((a, b) => a.date.localeCompare(b.date))
                       .map((t) => (
                         <tr key={t.id} className="border-b border-violet-100 dark:border-violet-900/40">
-                          <td className="py-2 pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
-                          <td className="py-2 pr-4 text-zinc-800 dark:text-zinc-200">{t.description}</td>
-                          <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">
+                          <td className="py-2 pr-2 sm:pr-4 text-zinc-700 dark:text-zinc-300">{formatDateShort(t.date)}</td>
+                          <td className="py-2 pr-2 sm:pr-4 text-zinc-800 dark:text-zinc-200">{t.description}</td>
+                          <td className="py-2 pr-2 sm:pr-4 text-zinc-600 dark:text-zinc-400">
                             {t.card_line_kind === "compra" && "Compra"}
                             {t.card_line_kind === "resumo" && "Resumo / total"}
                             {t.card_line_kind === "pagamento" && "Pagamento"}
@@ -923,7 +923,7 @@ function PlanilhasContent() {
             ) : (
               <>
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[320px] border-collapse text-sm">
+                  <table className="w-full border-collapse text-xs sm:text-sm">
                     <thead>
                       <tr className="border-b border-zinc-200 dark:border-zinc-700">
                         <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Subcategoria</th>
@@ -967,7 +967,7 @@ function PlanilhasContent() {
             ) : (
               <>
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[320px] border-collapse text-sm">
+                  <table className="w-full border-collapse text-xs sm:text-sm">
                     <thead>
                       <tr className="border-b border-zinc-200 dark:border-zinc-700">
                         <th className="pb-2 pr-4 text-left font-medium text-zinc-600 dark:text-zinc-400">Categoria</th>

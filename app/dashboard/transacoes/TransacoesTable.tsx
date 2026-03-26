@@ -385,11 +385,11 @@ export function TransacoesTable({
       </div>
 
       {transactions.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-stretch gap-3 sm:items-center">
           <select
             value={accountFilter}
             onChange={(e) => setAccountFilter(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white sm:w-auto"
           >
             <option value="">Todas as contas</option>
             {accounts.map((a) => (
@@ -401,12 +401,12 @@ export function TransacoesTable({
             placeholder="Buscar por descrição..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder:text-zinc-500"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder:text-zinc-500 sm:w-auto"
           />
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white sm:w-auto"
           >
             <option value="">Todas as categorias</option>
             {categories.map((cat) => (
@@ -427,7 +427,7 @@ export function TransacoesTable({
                 setImportBatchFilter("");
               }
             }}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white sm:w-auto"
           >
             <option value="">Todas as origens</option>
             {context === "bank" && (
@@ -448,7 +448,7 @@ export function TransacoesTable({
               }
             }}
             disabled={pdfBatchOptions.length === 0}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white sm:w-auto"
           >
             <option value="">
               {context === "credit" ? "Todas as faturas (PDF)" : "Todos os lotes (PDF extrato)"}
@@ -465,7 +465,7 @@ export function TransacoesTable({
             <select
               value={cardLineKindFilter}
               onChange={(e) => setCardLineKindFilter(e.target.value)}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white sm:w-auto"
             >
               <option value="">Todas as linhas (fatura)</option>
               <option value="compra">Compra</option>
@@ -570,11 +570,11 @@ export function TransacoesTable({
           <option key={cat} value={cat} />
         ))}
       </datalist>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+      <div className="overflow-x-hidden sm:overflow-x-auto">
+        <table className="w-full table-fixed border-collapse text-left text-xs sm:text-sm">
           <thead>
             <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80">
-              <th className="w-10 px-2 py-3">
+              <th className="hidden w-10 px-2 py-3 sm:table-cell">
                 <input
                   type="checkbox"
                   checked={isAllSelected}
@@ -583,35 +583,35 @@ export function TransacoesTable({
                   className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-800"
                 />
               </th>
-              <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+              <th className="px-2 py-3 sm:px-4 sm:whitespace-nowrap font-semibold text-zinc-700 dark:text-zinc-300">
                 Data
               </th>
-              <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+              <th className="px-2 py-3 sm:px-4 font-semibold text-zinc-700 dark:text-zinc-300">
                 Descrição
               </th>
-              <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+              <th className="hidden px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300 lg:table-cell">
                 Conta
               </th>
-              <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+              <th className="hidden px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300 lg:table-cell">
                 Categoria
               </th>
-              <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+              <th className="hidden px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300 lg:table-cell">
                 Subcategoria
               </th>
               {showCardLineColumn && (
-                <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+                <th className="hidden px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300 lg:table-cell">
                   Linha fatura
                 </th>
               )}
               {showParcelaColumn && (
-                <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300">
+                <th className="hidden px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300 lg:table-cell">
                   Parcela
                 </th>
               )}
-              <th className="px-4 py-3 font-semibold text-zinc-700 dark:text-zinc-300 text-right">
+              <th className="w-24 px-2 py-3 sm:w-24 sm:px-4 font-semibold text-zinc-700 dark:text-zinc-300 text-right">
                 Valor
               </th>
-              <th className="w-24 px-4 py-3" />
+              <th className="w-20 px-2 py-3 sm:w-24 sm:px-4" />
             </tr>
           </thead>
           <tbody>
@@ -622,8 +622,8 @@ export function TransacoesTable({
               >
                 {editingId === t.id ? (
                   <>
-                    <td className="w-10 px-2 py-2" />
-                    <td className="px-4 py-2">
+                    <td className="hidden w-10 px-2 py-2 sm:table-cell" />
+                    <td className="px-2 py-2 sm:px-4">
                       <input
                         type="date"
                         value={editForm.date ?? ""}
@@ -633,7 +633,7 @@ export function TransacoesTable({
                         className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
                       />
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-2 py-2 sm:px-4">
                       <input
                         type="text"
                         value={editForm.description ?? ""}
@@ -646,7 +646,7 @@ export function TransacoesTable({
                         className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
                       />
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="hidden px-4 py-2 lg:table-cell">
                       <select
                         value={editForm.account_id ?? ""}
                         onChange={(e) =>
@@ -660,7 +660,7 @@ export function TransacoesTable({
                         ))}
                       </select>
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="hidden px-4 py-2 lg:table-cell">
                       <input
                         type="text"
                         list="categories-datalist"
@@ -677,7 +677,7 @@ export function TransacoesTable({
                         className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
                       />
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="hidden px-4 py-2 lg:table-cell">
                       <select
                         value={editForm.subcategoria ?? "Variáveis"}
                         onChange={(e) =>
@@ -691,14 +691,14 @@ export function TransacoesTable({
                       </select>
                     </td>
                     {showCardLineColumn && (
-                      <td className="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400">
+                      <td className="hidden px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400 lg:table-cell">
                         {editForm.card_line_kind
                           ? CARD_LINE_LABELS[editForm.card_line_kind] ?? editForm.card_line_kind
                           : "—"}
                       </td>
                     )}
                     {showParcelaColumn && (
-                      <td className="px-4 py-2">
+                      <td className="hidden px-4 py-2 lg:table-cell">
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
@@ -730,8 +730,8 @@ export function TransacoesTable({
                         </div>
                       </td>
                     )}
-                    <td className="px-4 py-2">
-                      <div className="flex items-center justify-end gap-1">
+                    <td className="px-2 py-2 sm:px-4">
+                      <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:justify-end sm:gap-1">
                         <select
                           value={editForm.type ?? "debit"}
                           onChange={(e) =>
@@ -762,12 +762,12 @@ export function TransacoesTable({
                                 type === "debit" ? (Number.isNaN(v) ? 0 : -Math.abs(v)) : Math.abs(v),
                             }));
                           }}
-                          className="w-28 rounded border border-zinc-300 bg-white px-2 py-1.5 text-right tabular-nums text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                          className="w-20 rounded border border-zinc-300 bg-white px-2 py-1.5 text-right tabular-nums text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white sm:w-28"
                         />
                       </div>
                     </td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-1">
+                    <td className="px-2 py-2 sm:px-4">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
                         <button
                           type="button"
                           onClick={saveEdit}
@@ -789,7 +789,7 @@ export function TransacoesTable({
                   </>
                 ) : (
                   <>
-                    <td className="w-10 px-2 py-3">
+                    <td className="hidden w-10 px-2 py-3 sm:table-cell">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(t.id)}
@@ -798,30 +798,30 @@ export function TransacoesTable({
                         className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500 dark:border-zinc-600 dark:bg-zinc-800"
                       />
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 tabular-nums text-zinc-600 dark:text-zinc-400">
+                    <td className="px-2 py-3 sm:px-4 sm:whitespace-nowrap tabular-nums text-zinc-600 dark:text-zinc-400">
                       {formatDate(t.date)}
                     </td>
-                    <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100">
+                    <td className="max-w-[9.5rem] break-words px-2 py-3 text-zinc-900 dark:text-zinc-100 sm:max-w-none sm:px-4">
                       {t.description}
                     </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    <td className="hidden px-4 py-3 text-zinc-600 dark:text-zinc-400 lg:table-cell">
                       {getAccountName(t.account_id)}
                     </td>
-                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                    <td className="hidden px-4 py-3 text-zinc-600 dark:text-zinc-400 lg:table-cell">
                       {t.category ?? "—"}
                     </td>
-                    <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
+                    <td className="hidden px-4 py-3 text-zinc-500 dark:text-zinc-400 lg:table-cell">
                       {t.subcategoria ?? getSubcategoria(t.category)}
                     </td>
                     {showCardLineColumn && (
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                      <td className="hidden px-4 py-3 text-zinc-600 dark:text-zinc-400 lg:table-cell">
                         {t.card_line_kind
                           ? CARD_LINE_LABELS[t.card_line_kind] ?? t.card_line_kind
                           : "—"}
                       </td>
                     )}
                     {showParcelaColumn && (
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                      <td className="hidden px-4 py-3 text-zinc-600 dark:text-zinc-400 lg:table-cell">
                         {t.parcela_numero != null && t.parcela_total != null ? (
                           <span title={t.parcela_total - t.parcela_numero > 0 ? `Faltam ${t.parcela_total - t.parcela_numero} parcelas` : undefined}>
                             {t.parcela_numero}/{t.parcela_total}
@@ -835,7 +835,7 @@ export function TransacoesTable({
                       </td>
                     )}
                     <td
-                      className={`whitespace-nowrap px-4 py-3 text-right tabular-nums font-medium ${
+                      className={`px-2 py-3 sm:px-4 sm:whitespace-nowrap text-right tabular-nums font-medium ${
                         t.type === "credit"
                           ? "text-emerald-600 dark:text-emerald-400"
                           : "text-red-600 dark:text-red-400"
@@ -844,8 +844,8 @@ export function TransacoesTable({
                       {t.type === "credit" ? "+" : ""}
                       {formatCurrency(Number(t.amount))}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
+                    <td className="px-2 py-3 sm:px-4">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                         <button
                           type="button"
                           onClick={() => startEdit(t)}
@@ -854,7 +854,7 @@ export function TransacoesTable({
                           Editar
                         </button>
                         {deletingId === t.id ? (
-                          <span className="flex items-center gap-1 text-xs">
+                          <span className="flex flex-col items-start gap-1 text-xs sm:flex-row sm:items-center">
                             <button
                               type="button"
                               onClick={() => confirmDelete(t.id)}
