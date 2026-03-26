@@ -6,7 +6,7 @@ const env = {
   anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 };
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
   const supabase = createServerClient(env.url, env.anonKey, {
     cookies: {
@@ -58,3 +58,4 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ["/", "/login", "/cadastro", "/dashboard/:path*", "/auth/callback"],
 };
+

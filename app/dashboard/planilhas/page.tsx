@@ -34,6 +34,7 @@ type Transaction = {
   parcela_numero?: number | null;
   parcela_total?: number | null;
   import_source?: string | null;
+  import_order?: number | null;
   card_line_kind?: string | null;
 };
 
