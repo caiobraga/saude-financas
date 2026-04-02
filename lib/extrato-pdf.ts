@@ -110,6 +110,9 @@ const SKIP_DESCRIPTION_PATTERNS = [
   /^informações\s+adicionais/i,
   /^informações\s+complementares/i,
   /^lançamentos\s+futuros\s*$/i,
+  /\blan[çc]amentos\s+futuros\b/i,
+  /\blimites\s+de\s+credito\s+dispon[ií]veis\b/i,
+  /\bextratos\s+emitidos\s+at[eé]\b/i,
   /^total\s+aplicações/i,
   /^\s*saldo\s*$/i,
   /^\s*saldo\s+do\s+dia\s*$/i,
@@ -174,6 +177,7 @@ function shouldSkipBalanceContext(text: string): boolean {
     /\bsaldo\s+bloq\.?\s*anterior\b/.test(normalized) ||
     /\bsaldo\s+final\b/.test(normalized) ||
     /\bsaldo\s+em\s+conta\b/.test(normalized) ||
+    /\bsaldo\s+total\s+disponivel(\s+dia)?\b/.test(normalized) ||
     /\bsaldo\s+disponivel\b/.test(normalized) ||
     /\bsaldo\s+bloqueado\b/.test(normalized)
   );
@@ -185,7 +189,7 @@ function shouldSkipBalanceContext(text: string): boolean {
  */
 function stripTrailingBalanceSegment(text: string): string {
   const marker =
-    /\bsaldo\s+do\s+dia\b|\bsaldo\s+anterior\b|\bsaldo\s+bloq\.?\s*anterior\b|\bsaldo\s+final\b|\bsaldo\s+em\s+conta\b|\bsaldo\s+dispon[ií]vel\b|\bsaldo\s+bloqueado\b/i;
+    /\bsaldo\s+do\s+dia\b|\bsaldo\s+anterior\b|\bsaldo\s+bloq\.?\s*anterior\b|\bsaldo\s+final\b|\bsaldo\s+em\s+conta\b|\bsaldo\s+total\s+dispon[ií]vel(?:\s+dia)?\b|\bsaldo\s+dispon[ií]vel\b|\bsaldo\s+bloqueado\b/i;
   const match = marker.exec(text);
   if (!match || match.index <= 0) return text;
   return text.slice(0, match.index).trim();
@@ -335,11 +339,18 @@ function limparDescricao(s: string, maxLen = 200): string {
 function juntarLinhasContinuacao(linhas: string[]): string[] {
   // Linha inicia com data (dd/mm ou dd/mm/yyyy) → nova transação; senão → continuação da anterior
   const dataNoInicio = /^\d{1,2}\s*[\/\-]\s*\d{1,2}(?:\s|$|[\/\-]\s*\d)/;
+  /** Não colar na transação anterior: é outra seção (evita SICOOB colar "LANÇAMENTOS FUTUROS" no PIX). */
+  const cabecalhoNovaSecao =
+    /^\s*(lan[çc]amentos\s+futuros|informa[çc][oõ]es\s+adicionais|informa[çc][oõ]es\s+complementares)\b/i;
   const resultado: string[] = [];
   for (const line of linhas) {
     const t = line.trim();
     if (!t) continue;
-    if (resultado.length > 0 && !dataNoInicio.test(t)) {
+    if (
+      resultado.length > 0 &&
+      !dataNoInicio.test(t) &&
+      !cabecalhoNovaSecao.test(t)
+    ) {
       resultado[resultado.length - 1] += " " + t;
     } else {
       resultado.push(t);
@@ -492,15 +503,9 @@ export function parseExtratoTexto(texto: string): TransacaoExtrato[] {
     });
   }
 
-  const seen = new Set<string>();
-  const unicas = transacoes.filter((t) => {
-    const key = `${t.date}|${t.description.slice(0, 50)}|${t.amount}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  return unicas;
+  // Não deduplicar por (data, descrição, valor): extratos podem ter vários lançamentos
+  // idênticos no mesmo dia (ex.: dois SISPAG do mesmo valor).
+  return transacoes;
 }
 
 /**
@@ -578,22 +583,19 @@ function parseExtratoTextoFallback(texto: string): TransacaoExtrato[] {
     });
   }
 
-  const seen = new Set<string>();
-  const unicas = transacoes.filter((t) => {
-    const key = `${t.date}|${t.description.slice(0, 50)}|${t.amount}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  return unicas;
+  return transacoes;
 }
 
 /**
  * Extrai apenas a seção "Lançamentos" do extrato (ex.: BB), até "Informações Adicionais"
  * ou "Lançamentos Futuros". Se não achar a seção, retorna o texto inteiro.
+ *
+ * Importante: não usar o rodapé "Lançamentos Futuros" como início da seção — em extratos
+ * SICOOB só existe esse trecho com a palavra "Lançamentos", e cortaria o extrato inteiro.
  */
 function extrairSecaoLancamentos(texto: string): string {
-  const lancamentosMatch = texto.match(/\bLan[çc]amentos\b/i);
+  const inicioSecao = /\bLan[çc]amentos\b(?!\s+Futuros)/i;
+  const lancamentosMatch = texto.match(inicioSecao);
   if (!lancamentosMatch) return texto;
 
   const start = lancamentosMatch.index ?? 0;
@@ -606,7 +608,20 @@ function extrairSecaoLancamentos(texto: string): string {
   const bloco = depoisLancamentos.slice(0, end).trim();
 
   const semCabecalho = bloco.replace(/^Lan[çc]amentos\s*/i, "").replace(/^Dia\s+[\s\S]*?Valor\s*/i, "").trim();
-  return semCabecalho || bloco;
+  const out = semCabecalho || bloco;
+  if (!out) return texto;
+  return out;
+}
+
+/**
+ * Corta antes de "Lançamentos Futuros": no SICOOB/BB o PDF cola agendamentos futuros e texto
+ * jurídico (limites de crédito, SAC, ouvidoria) — não são lançamentos efetivados no período.
+ */
+function cortarAntesLancamentosFuturos(texto: string): string {
+  const re = /\blan[çc]amentos\s+futuros\b/i;
+  const m = re.exec(texto);
+  if (!m) return texto;
+  return texto.slice(0, m.index).trimEnd();
 }
 
 /**
@@ -671,14 +686,7 @@ function parseExtratoPorDataNoInicio(texto: string): TransacaoExtrato[] {
     });
   }
 
-  const seen = new Set<string>();
-  const unicas = transacoes.filter((t) => {
-    const key = `${t.date}|${t.description.slice(0, 50)}|${t.amount}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  return unicas;
+  return transacoes;
 }
 
 /**
@@ -686,7 +694,8 @@ function parseExtratoPorDataNoInicio(texto: string): TransacaoExtrato[] {
  * e formato genérico com data no início da linha e valor/saldo no fim — ex.: Sicredi).
  */
 export function parseExtratoTextoComFallback(texto: string): TransacaoExtrato[] {
-  const soLancamentos = extrairSecaoLancamentos(texto);
+  const textoBase = cortarAntesLancamentosFuturos(texto);
+  const soLancamentos = extrairSecaoLancamentos(textoBase);
   const fallback = parseExtratoTextoFallback(soLancamentos);
   const porLinhas = parseExtratoTexto(soLancamentos); // expande blob (ex.: SICOOB 1 linha → várias)
 
@@ -694,7 +703,7 @@ export function parseExtratoTextoComFallback(texto: string): TransacaoExtrato[] 
     fallback.length >= porLinhas.length ? fallback : porLinhas;
 
   if (resultado.length === 0) {
-    const porDataNoInicio = parseExtratoPorDataNoInicio(texto);
+    const porDataNoInicio = parseExtratoPorDataNoInicio(textoBase);
     if (porDataNoInicio.length > 0) return porDataNoInicio;
   }
 

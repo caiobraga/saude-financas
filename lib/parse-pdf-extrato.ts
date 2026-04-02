@@ -25,7 +25,11 @@ export async function parsePdfExtrato(
   buffer: Uint8Array
 ): Promise<ResultadoParseExtrato> {
   const { text } = await extractText(buffer, { mergePages: true });
-  const texto = text ?? "";
+  const texto = Array.isArray(text)
+    ? text.join("\n")
+    : typeof text === "string"
+      ? text
+      : "";
   const transacoes = parseExtratoTextoComFallback(texto).filter(
     (t) => t.date.length === 10
   );

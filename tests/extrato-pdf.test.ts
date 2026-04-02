@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { parseExtratoTextoComFallback } from "../lib/extrato-pdf";
+import {
+  parseExtratoTexto,
+  parseExtratoTextoComFallback,
+} from "../lib/extrato-pdf";
 
 const FIXTURES_DIR = join(__dirname, "fixtures");
 
@@ -20,6 +23,31 @@ const COMPROVANTE_BB_ESPERADOS = [
 ];
 
 describe("extrato-pdf", () => {
+  it("não importa SALDO TOTAL DISPONÍVEL DIA (resumo BB, não é lançamento)", () => {
+    const texto =
+      "27/03/2026 SALDO TOTAL DISPONÍVEL DIA 4.966,14 27/03/2026 PIX QR CODE RECEBIDO FULANO 10,00";
+    const transacoes = parseExtratoTextoComFallback(texto);
+    expect(
+      transacoes.some((t) => /saldo\s+total\s+dispon/i.test(t.description))
+    ).toBe(false);
+    expect(transacoes.some((t) => t.amount === 10)).toBe(true);
+  });
+
+  it("mantém duas transações iguais no mesmo dia (mesmo valor e descrição)", () => {
+    const texto = [
+      "30/03/2026 SISPAG FORNECEDORES 100,00 (-)",
+      "30/03/2026 SISPAG FORNECEDORES 100,00 (-)",
+    ].join("\n");
+    const transacoes = parseExtratoTexto(texto);
+    const iguais = transacoes.filter(
+      (t) =>
+        t.date === "2026-03-30" &&
+        t.description.includes("SISPAG FORNECEDORES") &&
+        t.amount === -100
+    );
+    expect(iguais.length).toBe(2);
+  });
+
   describe("Comprovante BB (comprovante-bb-extracted.txt)", () => {
     it("extrai todas as transações da seção Lançamentos e não importa SALDO", () => {
       const texto = readFileSync(
@@ -96,6 +124,33 @@ describe("extrato-pdf", () => {
       expect(cred10).toBeDefined();
       expect(cred175).toBeDefined();
       expect(deb100).toBeDefined();
+    });
+
+    it("remove rodapé LANÇAMENTOS FUTUROS (débito colado com texto de limite SAC — não importar)", () => {
+      const blob =
+        "02/03 DÉB.CONV.DEM.EMPRES 1.198,78D DOC.: MASTERCARD " +
+        "LANÇAMENTOS FUTUROS DATA HISTÓRICO VALOR 06/04/26 DÉB.CONV.DEM.EMPRES 1.198,78D DOC.: MASTERCARD LIMITES DE CREDITO DISPONÍVEIS PARCELA MÁXIMA";
+
+      const transacoes = parseExtratoTextoComFallback(blob);
+      expect(transacoes.filter((t) => t.amount === -1198.78)).toHaveLength(1);
+      expect(
+        transacoes.some((t) => /limites\s+de\s+credito\s+dispon/i.test(t.description))
+      ).toBe(false);
+    });
+
+    it("não usa LANÇAMENTOS FUTUROS como início da seção (evita extrato SICOOB vazio + lixo do fallback)", () => {
+      // Só existe "LANÇAMENTOS" no rodapé "LANÇAMENTOS FUTUROS" — não pode ser anchor da seção.
+      const soFooter =
+        "SICOOB PERÍODO: 01/03/2026 - 30/03/2026\n" +
+        "02/03 PIX RECEB.OUTRA IF 65,00C Recebimento Pix FULANO DOC.: Pix\n" +
+        "LANÇAMENTOS FUTUROS DATA HISTÓRICO VALOR\n" +
+        "06/04/2026 DÉB.CONV.DEM.EMPRES 1.198,78D DOC.: X";
+
+      const transacoes = parseExtratoTextoComFallback(soFooter);
+      expect(transacoes.some((t) => t.amount === 65 && t.date === "2026-03-02")).toBe(true);
+      expect(transacoes.some((t) => /lan[çc]amentos\s+futuros/i.test(t.description))).toBe(
+        false
+      );
     });
 
     it("extrai várias transações quando o PDF vem em uma única linha (blobo SICOOB)", () => {
